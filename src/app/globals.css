@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+/* ============================================================
+   MAJOR KG — Premium Cyber-Minimalism
+   Графитовая база, один горячий акцент, матовое стекло.
+   ============================================================ */
+@theme {
+  /* Поверхности */
+  --color-base: #090a0f;
+  --color-surface: #0e1017;
+  --color-surface-2: #13161f;
+  --color-surface-3: #191d28;
+
+  /* Акцент */
+  --color-accent: #ff4655;
+  --color-accent-soft: #ff7480;
+  --color-accent-deep: #d92f3d;
+
+  /* Служебные */
+  --color-prize: #e3b341;
+  --color-success: #3ecf8e;
+  --color-info: #6d8cff;
+
+  /* Типографика */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-display-face), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Радиусы */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  * {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  html {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-base);
+    color: rgba(255, 255, 255, 0.92);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv02", "cv03";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: rgba(255, 70, 85, 0.3);
+    color: #fff;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 999px; }
+  *::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ============================================================
+   Стекло и поверхности
+   ============================================================ */
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-strong {
+  background: rgba(14, 16, 23, 0.86);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.panel {
+  background: var(--color-surface);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.panel-2 {
+  background: var(--color-surface-2);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Тонкая световая кромка сверху — признак «дорогой» карточки */
+.edge {
+  position: relative;
+}
+.edge::before {
+  content: "";
+  position: absolute;
+  inset-inline: 10%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  pointer-events: none;
+}
+
+/* Едва различимая техническая сетка — только под героем */
+.mesh {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(ellipse 80% 62% at 50% 0%, #000 20%, transparent 76%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 62% at 50% 0%, #000 20%, transparent 76%);
+}
+
+/* ============================================================
+   Микро-взаимодействия
+   ============================================================ */
+@keyframes mk-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 70, 85, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(255, 70, 85, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 70, 85, 0); }
+}
+
+@keyframes mk-rise {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes mk-overlay-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes mk-overlay-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes mk-content-in {
+  from { opacity: 0; transform: translate(-50%, -48%) scale(0.97) }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1) }
+}
+@keyframes mk-content-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1) }
+  to { opacity: 0; transform: translate(-50%, -48%) scale(0.98) }
+}
+
+@layer utilities {
+  .pulse-live { animation: mk-pulse 2.4s ease-out infinite; }
+  .rise { animation: mk-rise 0.6s var(--ease-out-expo) both; }
+  .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .balance { text-wrap: balance; }
+
+  /* Микро-свечение главной CTA */
+  .cta-glow {
+    box-shadow: 0 10px 34px -14px rgba(255, 70, 85, 0.75);
+    transition: box-shadow 0.25s var(--ease-out-expo), transform 0.2s var(--ease-out-expo);
+  }
+  .cta-glow:hover {
+    box-shadow: 0 14px 44px -12px rgba(255, 70, 85, 0.95), 0 0 0 1px rgba(255, 116, 128, 0.35);
+  }
+}
+
+[data-state="open"].overlay-anim { animation: mk-overlay-in 0.2s ease-out; }
+[data-state="closed"].overlay-anim { animation: mk-overlay-out 0.16s ease-in; }
+[data-state="open"].content-anim { animation: mk-content-in 0.26s var(--ease-out-expo); }
+[data-state="closed"].content-anim { animation: mk-content-out 0.16s ease-in; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
