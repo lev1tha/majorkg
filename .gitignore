@@ -2,12 +2,15 @@ node_modules
 .next
 out
 build
+dist
 .DS_Store
 *.pem
 npm-debug.log*
+.env
 .env*.local
 .vercel
 next-env.d.ts
 tsconfig.tsbuildinfo
 
-.vercel
+# Локальная база SQLite
+backend/data

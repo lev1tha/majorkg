@@ -2,10 +2,23 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "majorkg-dev",
+      "name": "majorkg-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev:web"
+      ],
       "port": 3000
+    },
+    {
+      "name": "majorkg-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:api"
+      ],
+      "port": 4000,
+      "autoPort": false
     }
   ]
 }
