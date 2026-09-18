@@ -44,9 +44,9 @@ echo "── ресурсы ──"; free -h; df -h /
 Если `3100` или `4100` заняты — поменять `WEB_PORT`/`API_PORT` в `.env` и
 `upstream` в `nginx/major.kg.conf`.
 
-Сборка Next.js забирает примерно 1–1.5 ГБ RAM. На 4 ГБ с соседними
-контейнерами это впритык — если своп отсутствует (`free -h` показывает
-`Swap: 0B`), добавить его до сборки:
+Сборка Next.js забирает примерно 1–1.5 ГБ RAM. На 4 ГБ рядом с postgres и
+gunicorn от chpucenter это впритык, а swap на сервере отсутствует —
+добавить до первой сборки:
 
 ```bash
 fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
@@ -158,48 +158,57 @@ docker compose -f docker-compose.prod.yml run --rm api npm run seed
 
 ## Шаг 5. nginx и TLS
 
-```bash
-cp deploy/nginx/major.kg.conf /etc/nginx/sites-available/major.kg
-ln -s /etc/nginx/sites-available/major.kg /etc/nginx/sites-enabled/major.kg
+Сертификат — **Cloudflare Origin Certificate**: домен проксируется через
+CF, certbot на сервере не стоит, а origin-сертификат живет 15 лет и не
+требует продления. Браузер видит сертификат самого Cloudflare, origin-ный
+проверяет только CF.
 
-# Настоящий IP игрока вместо адреса Cloudflare
-bash deploy/cloudflare-realip.sh
-```
-
-У `www.major.kg` сейчас нет DNS-записи — только у апекса `major.kg`.
-Либо завести в Cloudflare CNAME `www` → `major.kg` (оранжевая тучка),
-либо убрать из конфига второй `server`-блок с `server_name www.major.kg`
-и не указывать `-d www.major.kg` при выпуске сертификата: certbot не
-подтвердит домен, который не резолвится, и упадет весь выпуск.
-
-Сертификат. Домен проксируется через Cloudflare, поэтому есть два пути:
-
-**a) Let's Encrypt** — как у соседних сайтов, если certbot уже стоит.
-Проверка идет по HTTP, поэтому на время выпуска в Cloudflare нужно
-выключить «Always Use HTTPS» либо серую тучку:
-
-```bash
-certbot --nginx -d major.kg -d www.major.kg
-```
-
-**b) Cloudflare Origin Certificate** — проще за прокси и живет 15 лет.
-В панели CF: SSL/TLS → Origin Server → Create Certificate, положить на
-сервер и поправить пути в конфиге:
+1. Панель Cloudflare → SSL/TLS → Origin Server → **Create Certificate**.
+   Hostnames оставить `major.kg, *.major.kg`, формат PEM.
+2. Положить обе половины на сервер (ключ показывается один раз):
 
 ```bash
 mkdir -p /etc/ssl/major.kg && chmod 700 /etc/ssl/major.kg
-# вставить cert.pem и key.pem, затем в major.kg.conf заменить пути
-# ssl_certificate / ssl_certificate_key и убрать include options-ssl-nginx.conf
+nano /etc/ssl/major.kg/cert.pem     # Origin Certificate
+nano /etc/ssl/major.kg/key.pem      # Private Key
+chmod 600 /etc/ssl/major.kg/key.pem
 ```
 
-Применить:
+3. Конфиги на место:
 
 ```bash
+cd /root/projects/majorkg
+cp deploy/nginx/major.kg.conf     /etc/nginx/sites-available/major.kg
+cp deploy/nginx/major.kg-ssl.conf /etc/nginx/snippets/major.kg-ssl.conf
+ln -sf /etc/nginx/sites-available/major.kg /etc/nginx/sites-enabled/major.kg
+
+# Настоящий IP игрока вместо адреса Cloudflare
+bash deploy/cloudflare-realip.sh
+
 nginx -t && systemctl reload nginx
 ```
 
-`nginx -t` обязателен: он проверит и соседние сайты — если конфиг не
-пройдет, `reload` не выполнится и работающие проекты не упадут.
+`nginx -t` обязателен: он проверяет все сайты сразу — если конфиг не
+пройдет, `reload` не выполнится и соседний chpucenter.com не упадет.
+
+У `www.major.kg` сейчас нет DNS-записи, только у апекса. Сертификат
+`*.major.kg` его покрывает, так что достаточно завести в Cloudflare CNAME
+`www` → `major.kg` под оранжевой тучкой — редирект на апекс в конфиге уже
+есть. Не завести тоже можно: блок просто не будет использоваться.
+
+<details>
+<summary>Альтернатива: Let's Encrypt</summary>
+
+Работает и за прокси, но выпуск идет по HTTP, поэтому на это время в
+Cloudflare нужно снять «Always Use HTTPS» или тучку. В конфиге заменить
+пути на `/etc/letsencrypt/live/major.kg/{fullchain,privkey}.pem`.
+
+```bash
+apt install certbot python3-certbot-nginx
+certbot --nginx -d major.kg        # www — только если завели DNS-запись
+```
+
+</details>
 
 ## Шаг 6. Cloudflare
 
