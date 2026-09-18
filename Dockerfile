@@ -17,11 +17,22 @@ COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
 
-# Именно install, а не ci: package-lock.json собран на macOS arm64 и не
-# содержит linux-бинарников (@next/swc, @tailwindcss/oxide, lightningcss,
-# esbuild, sharp). npm ci молча их пропустит и сборка Next упадет.
-# Версии остальных пакетов при этом берутся из лока.
-RUN npm install --no-audit --no-fund
+# package-lock.json собран на macOS arm64, и платформенные пакеты записаны
+# в нем только как darwin-arm64: @typescript/typescript-*, @next/swc-*,
+# @tailwindcss/oxide-*, lightningcss-*, @esbuild/*, @img/sharp-*. Все они
+# объявлены как optionalDependencies, а npm — и ci, и install — собирает
+# дерево строго по локу и linux-варианты в него не добавляет. Итог: tsc
+# падает с "Unable to resolve @typescript/typescript-linux-x64".
+# Поэтому в образе резолвим заново от package.json. Диапазоны там — ^,
+# то есть мажоры зафиксированы, но патчи могут разъехаться с локальными.
+#
+# Побочный результат — корректный для linux лок, его можно забрать из
+# образа и закоммитить, чтобы вернуться к воспроизводимому npm ci:
+#   docker compose -f docker-compose.prod.yml run --rm --entrypoint cat \
+#     api /app/package-lock.linux.json > package-lock.json
+RUN rm -f package-lock.json \
+ && npm install --no-audit --no-fund \
+ && cp package-lock.json /app/package-lock.linux.json
 
 # NEXT_PUBLIC_* инлайнятся в бандл на этапе сборки, поэтому приходят
 # аргументами. API_INTERNAL_URL нужен и на сборке (rewrites в

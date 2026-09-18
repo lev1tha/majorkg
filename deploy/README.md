@@ -244,6 +244,7 @@ tail -f /var/log/nginx/major.kg.error.log
 | Слетает сессия | Cookie ставится с `secure` — сайт должен открываться по https |
 | Всех лимитит 429 разом | Не подключен `cloudflare-realip.conf`, и все игроки считаются одним IP |
 | Сборка падает по памяти | Нет свопа, см. шаг 1 |
+| `Unable to resolve @typescript/typescript-linux-x64` | Используется macOS-лок; в `Dockerfile` зависимости должны резолвиться заново — см. комментарий там |
 
 ## Бэкап и восстановление
 
