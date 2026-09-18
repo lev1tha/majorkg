@@ -1,0 +1,82 @@
+# MAJOR KG в продакшене: два процесса из одного образа.
+# Наружу ничего не торчит — порты слушают только 127.0.0.1,
+# публичный трафик приводит системный nginx (deploy/nginx/major.kg.conf).
+#
+# Запуск:  docker compose -f docker-compose.prod.yml up -d --build
+
+name: majorkg
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      # Web ходит в api по внутренней сети compose, минуя nginx.
+      API_INTERNAL_URL: http://api:4000
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://major.kg}
+      NEXT_PUBLIC_FACEIT_LIVE: ${NEXT_PUBLIC_FACEIT_LIVE:-false}
+      NEXT_PUBLIC_DISCORD_URL: ${NEXT_PUBLIC_DISCORD_URL:-}
+      NEXT_PUBLIC_TELEGRAM_URL: ${NEXT_PUBLIC_TELEGRAM_URL:-}
+      NEXT_PUBLIC_GOOGLE_VERIFICATION: ${NEXT_PUBLIC_GOOGLE_VERIFICATION:-}
+      NEXT_PUBLIC_YANDEX_VERIFICATION: ${NEXT_PUBLIC_YANDEX_VERIFICATION:-}
+  image: majorkg-app:latest
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  api:
+    <<: *app
+    working_dir: /app/backend
+    command: ["node", "dist/index.js"]
+    # Секреты (SESSION_SECRET, STEAM_API_KEY, ADMIN_PASSWORD) — только тут,
+    # в образ они не попадают.
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      DATABASE_URL: ./data/majorkg.db
+    volumes:
+      # SQLite живет на диске хоста, переживает пересборку образа.
+      - ./backend/data:/app/backend/data
+    ports:
+      - "127.0.0.1:${API_PORT:-4100}:4000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  web:
+    <<: *app
+    working_dir: /app/frontend
+    command: ["/app/frontend/node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]
+    environment:
+      NODE_ENV: production
+      # Server components ходят в бэкенд напрямую по сети compose.
+      API_INTERNAL_URL: http://api:4000
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3100}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
