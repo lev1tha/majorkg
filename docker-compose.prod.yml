@@ -59,7 +59,7 @@ services:
   web:
     <<: *app
     working_dir: /app/frontend
-    command: ["/app/frontend/node_modules/.bin/next", "start", "-H", "0.0.0.0", "-p", "3000"]
+    command: ["next", "start", "-H", "0.0.0.0", "-p", "3000"]
     environment:
       NODE_ENV: production
       # Server components ходят в бэкенд напрямую по сети compose.

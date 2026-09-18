@@ -63,6 +63,10 @@ RUN npm run build
 # devDependencies остаются: tsx нужен для `npm run seed` в контейнере.
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
+# npm раскладывает бинарники то в корневой node_modules, то в воркспейсный —
+# зависит от того, есть ли конфликты версий. PATH снимает этот вопрос:
+# команды в compose зовут next и tsx по имени, а не по пути.
 ENV NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1
+    NEXT_TELEMETRY_DISABLED=1 \
+    PATH=/app/node_modules/.bin:/app/frontend/node_modules/.bin:/app/backend/node_modules/.bin:$PATH
 COPY --from=build /app /app
