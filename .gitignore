@@ -14,3 +14,6 @@ tsconfig.tsbuildinfo
 
 # Локальная база SQLite
 backend/data
+
+# Бэкапы базы, которые снимает deploy/deploy.sh
+backups

@@ -1,0 +1,30 @@
+# node_modules с хоста — с бинарниками под macOS; в образе ставятся свои.
+node_modules
+**/node_modules
+
+# Артефакты сборки — пересобираются внутри образа.
+.next
+**/.next
+dist
+**/dist
+out
+build
+*.tsbuildinfo
+**/tsconfig.tsbuildinfo
+next-env.d.ts
+
+# Секреты и локальная база в образ не попадают:
+# backend/.env подключается через env_file, данные — через volume.
+.env
+**/.env
+.env*.local
+backend/data
+
+.git
+.gitignore
+.idea
+.vscode
+.claude
+.DS_Store
+npm-debug.log*
+README.md
