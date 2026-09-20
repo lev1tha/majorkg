@@ -5,12 +5,15 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   ArrowLeft,
+  Gavel,
   HelpCircle,
   LayoutDashboard,
   LogOut,
   Menu,
   Network,
   Plus,
+  ServerCog,
+  Settings,
   Shuffle,
   Swords,
   Trophy,
@@ -30,8 +33,11 @@ const NAV = [
   { label: "Сетка", href: "/admin/bracket", icon: Network },
   { label: "Матчи", href: "/admin/matches", icon: Swords },
   { label: "Жеребьевка", href: "/admin/mix", icon: Shuffle },
+  { label: "Серверы", href: "/admin/servers", icon: ServerCog },
+  { label: "Апелляции", href: "/admin/appeals", icon: Gavel },
   { label: "Игроки", href: "/admin/players", icon: Users },
   { label: "FAQ", href: "/admin/faq", icon: HelpCircle },
+  { label: "Учетка", href: "/admin/settings", icon: Settings },
 ]
 
 export function AdminShell({ admin, children }: { admin: AdminDto; children: React.ReactNode }) {

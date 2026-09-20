@@ -34,6 +34,8 @@ export interface PlayerDto {
   status: PlayerStatus
   /** true — ELO пришло из FACEIT Data API, false — снимок из базы. */
   eloLive: boolean
+  /** Привязан ли профиль FACEIT (ищется по SteamID64 при входе). */
+  faceitLinked: boolean
   syncedAt: string | null
 }
 
@@ -195,6 +197,8 @@ export interface ViewerDto {
   level: number
   /** true — ник и аватар подтянуты из Steam, false — заглушка steam_XXXXXX. */
   steamSynced: boolean
+  /** Привязан ли профиль FACEIT — ищется по SteamID64 при входе. */
+  faceitLinked: boolean
 }
 
 /** Организатор: отдельная учетка со входом по логину и паролю. */
@@ -211,6 +215,49 @@ export interface FaqItemDto {
   answer: string
   position: number
   published: boolean
+}
+
+// ───────────────────────────── Вето карт ──────────────────────────────
+
+export type VetoAction = "ban" | "pick"
+export type VetoSide = "a" | "b"
+
+export interface VetoStepDto {
+  ordinal: number
+  action: VetoAction
+  side: VetoSide
+  /** Заполнен, когда ход сделан. */
+  map: string | null
+}
+
+export interface VetoStateDto {
+  matchId: number
+  format: string
+  pool: string[]
+  available: string[]
+  steps: VetoStepDto[]
+  turn: VetoStepDto | null
+  finished: boolean
+  /** Итоговый порядок карт серии — то, что готовится на сервере. */
+  maps: string[]
+  decider: string | null
+  /** Сторона текущего зрителя, если он играет в этом матче. */
+  viewerSide: VetoSide | null
+  sides: {
+    a: { lineupId: number; tag: string; name: string; seed: number } | null
+    b: { lineupId: number; tag: string; name: string; seed: number } | null
+  }
+}
+
+export interface ServerQueueItemDto {
+  matchId: number
+  format: string
+  state: string
+  a: { tag: string; name: string }
+  b: { tag: string; name: string }
+  finished: boolean
+  maps: string[]
+  waitingFor: VetoSide | null
 }
 
 export interface AdminOverviewDto {

@@ -1,8 +1,14 @@
 /**
  * FACEIT: лестница уровней CS2 и адаптер к официальному Data API v4.
  *
- * Без FACEIT_API_KEY адаптер молча возвращает null — ELO остается тем,
- * что лежит в базе, и интерфейс честно помечает данные как снимок.
+ * Профиль ищется по SteamID64, а не по нику. Ник на FACEIT и ник в Steam
+ * — разные строки, и просить игрока вводить свой FACEIT-ник руками
+ * незачем: SteamID64 у нас уже есть после входа, а FACEIT хранит его в
+ * `games.cs2.game_player_id`. Поэтому привязка выходит автоматической и
+ * без единого поля в форме.
+ *
+ * Без FACEIT_API_KEY все функции возвращают null — интерфейс показывает
+ * снимок из базы и честно об этом пишет.
  */
 
 const LADDER: { level: number; min: number; max: number }[] = [
@@ -24,40 +30,136 @@ export function levelFromElo(elo: number): number {
 }
 
 const FACEIT_API = "https://open.faceit.com/data/v4"
+const TIMEOUT_MS = 6000
 
-export interface FaceitSnapshot {
+async function faceitGet<T>(path: string, apiKey: string): Promise<T | null> {
+  try {
+    const response = await fetch(`${FACEIT_API}${path}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!response.ok) return null
+    return (await response.json()) as T
+  } catch {
+    // Сеть, таймаут или лимит API — данные просто не обновятся.
+    return null
+  }
+}
+
+export interface FaceitProfile {
+  faceitId: string
   nickname: string
   elo: number
   level: number
+  avatar: string | null
+  country: string | null
 }
 
-export async function fetchFaceitStats(
-  nickname: string,
+interface FaceitPlayerResponse {
+  player_id?: string
+  nickname?: string
+  avatar?: string
+  country?: string
+  games?: { cs2?: { faceit_elo?: number; skill_level?: number } }
+}
+
+function toProfile(data: FaceitPlayerResponse | null): FaceitProfile | null {
+  if (!data?.player_id || !data.nickname) return null
+
+  const elo = data.games?.cs2?.faceit_elo
+  if (typeof elo !== "number") return null
+
+  return {
+    faceitId: data.player_id,
+    nickname: data.nickname,
+    elo,
+    level: data.games?.cs2?.skill_level ?? levelFromElo(elo),
+    avatar: data.avatar?.trim() || null,
+    country: data.country?.toUpperCase() || null,
+  }
+}
+
+/** Профиль по SteamID64 — основной способ привязки. */
+export function fetchFaceitBySteamId(steamId: string, apiKey: string | undefined) {
+  if (!apiKey) return Promise.resolve(null)
+  return faceitGet<FaceitPlayerResponse>(
+    `/players?game=cs2&game_player_id=${encodeURIComponent(steamId)}`,
+    apiKey,
+  ).then(toProfile)
+}
+
+/** Профиль по нику — запасной путь, если игрок указал ник вручную. */
+export function fetchFaceitByNickname(nickname: string, apiKey: string | undefined) {
+  if (!apiKey) return Promise.resolve(null)
+  return faceitGet<FaceitPlayerResponse>(
+    `/players?game=cs2&nickname=${encodeURIComponent(nickname)}`,
+    apiKey,
+  ).then(toProfile)
+}
+
+export interface FaceitLifetime {
+  matches: number
+  winRate: number
+  kd: number
+  headshots: number
+}
+
+/**
+ * Пожизненная статистика. FACEIT отдает её строками в словаре с
+ * человекочитаемыми ключами, причем набор ключей со временем менялся —
+ * поэтому каждый показатель ищется по нескольким вариантам названия.
+ */
+export async function fetchFaceitLifetime(
+  faceitId: string,
+  apiKey: string | undefined,
+): Promise<FaceitLifetime | null> {
+  if (!apiKey) return null
+
+  const data = await faceitGet<{ lifetime?: Record<string, string> }>(
+    `/players/${encodeURIComponent(faceitId)}/stats/cs2`,
+    apiKey,
+  )
+  const lifetime = data?.lifetime
+  if (!lifetime) return null
+
+  const num = (...keys: string[]): number => {
+    for (const key of keys) {
+      const raw = lifetime[key]
+      if (raw === undefined) continue
+      const value = Number.parseFloat(raw)
+      if (Number.isFinite(value)) return value
+    }
+    return 0
+  }
+
+  return {
+    matches: Math.round(num("Matches", "Total Matches")),
+    winRate: Math.round(num("Win Rate %", "Win Rate")),
+    kd: Math.round(num("Average K/D Ratio", "K/D Ratio") * 100) / 100,
+    headshots: Math.round(num("Average Headshots %", "Total Headshots %")),
+  }
+}
+
+export interface FaceitSnapshot extends FaceitProfile {
+  lifetime: FaceitLifetime | null
+}
+
+/**
+ * Полный снимок игрока: профиль + пожизненная статистика.
+ * Вызывается при входе через Steam и при ручном обновлении.
+ */
+export async function fetchFaceitSnapshot(
+  input: { steamId: string; faceitId?: string | null; nickname?: string | null },
   apiKey: string | undefined,
 ): Promise<FaceitSnapshot | null> {
   if (!apiKey) return null
 
-  try {
-    const response = await fetch(
-      `${FACEIT_API}/players?nickname=${encodeURIComponent(nickname)}&game=cs2`,
-      { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(6000) },
-    )
-    if (!response.ok) return null
+  // Известный faceitId экономит запрос, но профиль все равно нужен: ELO меняется.
+  const profile =
+    (await fetchFaceitBySteamId(input.steamId, apiKey)) ??
+    (input.nickname ? await fetchFaceitByNickname(input.nickname, apiKey) : null)
 
-    const data = (await response.json()) as {
-      nickname?: string
-      games?: { cs2?: { faceit_elo?: number; skill_level?: number } }
-    }
-    const elo = data.games?.cs2?.faceit_elo
-    if (typeof elo !== "number") return null
+  if (!profile) return null
 
-    return {
-      nickname: data.nickname ?? nickname,
-      elo,
-      level: data.games?.cs2?.skill_level ?? levelFromElo(elo),
-    }
-  } catch {
-    // Сеть, таймаут или лимит API — рейтинг просто не обновится.
-    return null
-  }
+  return { ...profile, lifetime: await fetchFaceitLifetime(profile.faceitId, apiKey) }
 }

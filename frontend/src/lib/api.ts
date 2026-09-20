@@ -16,6 +16,7 @@ import type {
   RegistrationStatus,
   TournamentDto,
   TournamentStatus,
+  ServerQueueItemDto,
   ViewerDto,
 } from "./types"
 
@@ -292,6 +293,25 @@ export async function getAdmin(): Promise<AdminDto | null> {
   }
 }
 
+/** Очередь серверов: карты предстоящих матчей после вето. */
+export async function getServerQueue(slug: string) {
+  const data = await safe(
+    request<{ items: ServerQueueItemDto[] }>(`/admin/tournaments/${slug}/servers`, {
+      withSession: true,
+    }),
+    { items: [] },
+  )
+  return data.items
+}
+
+export async function getAdminAccounts() {
+  const data = await safe(
+    request<{ items: AdminDto[] }>(`/admin/auth/accounts`, { withSession: true }),
+    { items: [] },
+  )
+  return data.items
+}
+
 export async function getAdminFaq() {
   const data = await safe(
     request<{ items: FaqItemDto[] }>(`/admin/faq`, { withSession: true }),
@@ -334,6 +354,31 @@ export function getAdminTournaments() {
     request<{ items: TournamentDto[]; total: number }>(`/admin/tournaments`, { withSession: true }),
     { items: [], total: 0 },
   )
+}
+
+export async function getAdminTournament(slug: string): Promise<TournamentDto | null> {
+  try {
+    const data = await request<{ tournament: TournamentDto }>(`/admin/tournaments/${slug}`, {
+      withSession: true,
+    })
+    return data.tournament
+  } catch (error) {
+    if (isControlFlow(error)) throw error
+    if (error instanceof ApiError && error.status === 404) return null
+    console.error("[api]", error)
+    return null
+  }
+}
+
+/** Все заявки турнира, включая отклоненные и снятые. */
+export async function getAdminRegistrations(slug: string) {
+  const data = await safe(
+    request<{ items: ParticipantDto[] }>(`/admin/tournaments/${slug}/registrations`, {
+      withSession: true,
+    }),
+    { items: [] },
+  )
+  return data.items
 }
 
 export function getAdminPlayers(params: PlayerQuery = {}) {

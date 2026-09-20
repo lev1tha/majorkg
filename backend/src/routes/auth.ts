@@ -8,6 +8,7 @@ import { SESSION_COOKIE, cookieOptions, createSession, destroySession } from "..
 import { buildSteamAuthUrl, fetchSteamProfile, verifySteamAssertion } from "../lib/steam.js"
 import { requireAuth, viewerOf } from "../middleware/auth.js"
 import { rateLimit } from "../middleware/rate-limit.js"
+import { syncPlayer } from "../services/faceit-sync.js"
 import { findPlayerRowById } from "../services/players.js"
 import { listPlayerRegistrations } from "../services/registrations.js"
 import type { ViewerDto } from "../types.js"
@@ -79,6 +80,12 @@ authRouter.get(
       playerId = Number(info.lastInsertRowid)
     }
 
+    // Ник, аватар и FACEIT подтягиваются в фоне: игрок не должен ждать
+    // двух внешних API на редиректе после входа.
+    void syncPlayer(playerId, { force: true }).catch((error: unknown) => {
+      console.error("[auth] синхронизация после входа не удалась", error)
+    })
+
     res.cookie(SESSION_COOKIE, createSession(playerId), cookieOptions)
     res.redirect(`${env.siteUrl}/profile`)
   }),
@@ -117,8 +124,27 @@ authRouter.get(
       level: levelFromElo(row.elo),
       /** Без ключа Steam ник и аватар подтянуть неоткуда — говорим об этом честно. */
       steamSynced: Boolean(env.steamApiKey),
+      faceitLinked: Boolean(row.faceit_id),
     }
     res.json({ viewer })
+  }),
+)
+
+/**
+ * Подтянуть Steam и FACEIT прямо сейчас.
+ * Нужна, когда ключи настроили уже после того, как игрок вошел.
+ */
+authRouter.post(
+  "/me/sync",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 5 }),
+  handler(async (req, res) => {
+    const { refreshPlayer } = await import("../services/players.js")
+    res.json({
+      player: await refreshPlayer(viewerOf(req).id),
+      steamKey: Boolean(env.steamApiKey),
+      faceitKey: Boolean(env.faceitApiKey),
+    })
   }),
 )
 

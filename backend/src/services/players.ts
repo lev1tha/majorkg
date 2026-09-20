@@ -1,6 +1,6 @@
 import { db } from "../db/index.js"
 import { env } from "../env.js"
-import { fetchFaceitStats, levelFromElo } from "../lib/faceit.js"
+import { levelFromElo } from "../lib/faceit.js"
 import { ApiError } from "../lib/http.js"
 import type { PlayerDto, PlayerPerformanceDto, PlayerStatus } from "../types.js"
 
@@ -9,7 +9,9 @@ export interface PlayerRow {
   steam_id: string
   nickname: string
   faceit: string | null
+  faceit_id: string | null
   avatar: string | null
+  faceit_avatar: string | null
   role: string
   country: string
   city: string | null
@@ -29,7 +31,7 @@ export interface PlayerRow {
   elo_synced_at: string | null
 }
 
-const COLUMNS = `id, steam_id, nickname, faceit, avatar, role, country, city, elo, matches,
+const COLUMNS = `id, steam_id, nickname, faceit, faceit_id, avatar, faceit_avatar, role, country, city, elo, matches,
   win_rate, hltv_rating, kd, headshots, adr, kast, opening_win_rate, points, maps_played,
   trend, status, elo_synced_at`
 
@@ -39,7 +41,9 @@ export function toPlayerDto(row: PlayerRow, eloLive = false): PlayerDto {
     nickname: row.nickname,
     faceit: row.faceit,
     steamId: row.steam_id,
-    avatar: row.avatar,
+    // Аватар Steam приоритетнее: игрок узнает себя по нему.
+    avatar: row.avatar ?? row.faceit_avatar,
+    faceitLinked: Boolean(row.faceit_id),
     role: row.role,
     country: row.country,
     city: row.city,
@@ -112,23 +116,33 @@ export function findPlayerRowById(id: number): PlayerRow | undefined {
 }
 
 /**
- * Профиль игрока. При наличии FACEIT_API_KEY ELO подтягивается вживую
- * и сохраняется в базу — иначе отдается снимок.
+ * Профиль игрока.
+ *
+ * Данные освежаются не чаще раза в час (TTL в faceit-sync): открытие
+ * профиля не должно бить в FACEIT на каждый просмотр — там лимит
+ * запросов, и упереться в него значит потерять данные для всех.
  */
 export async function getPlayer(nickname: string): Promise<PlayerDto> {
   const row = findPlayerRowByNickname(nickname)
   if (!row) throw ApiError.notFound("Игрок не найден")
 
-  if (!row.faceit) return toPlayerDto(row)
+  if (!env.faceitApiKey) return toPlayerDto(row)
 
-  const snapshot = await fetchFaceitStats(row.faceit, env.faceitApiKey)
-  if (!snapshot) return toPlayerDto(row)
+  const { syncPlayer } = await import("./faceit-sync.js")
+  const result = await syncPlayer(row.id)
 
-  db.prepare(`UPDATE players SET elo = ?, elo_synced_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`).run(
-    snapshot.elo,
-    row.id,
-  )
-  return toPlayerDto({ ...row, elo: snapshot.elo, elo_synced_at: new Date().toISOString() }, true)
+  const fresh = findPlayerRowById(row.id) ?? row
+  return toPlayerDto(fresh, result.faceit)
+}
+
+/** Ручное обновление: кнопка в профиле и в админке. */
+export async function refreshPlayer(id: number): Promise<PlayerDto> {
+  const { syncPlayer } = await import("./faceit-sync.js")
+  const result = await syncPlayer(id, { force: true })
+
+  const row = findPlayerRowById(id)
+  if (!row) throw ApiError.notFound("Игрок не найден")
+  return toPlayerDto(row, result.faceit)
 }
 
 /**

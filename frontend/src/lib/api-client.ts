@@ -1,6 +1,17 @@
 "use client"
 
-import type { AdminDto, MatchDto, ParticipantDto, ScoutNoteDto } from "./types"
+import type {
+  AdminDto,
+  AppealDto,
+  MatchDto,
+  ParticipantDto,
+  PlayerDto,
+  RuleBlockDto,
+  ScoutNoteDto,
+  TournamentDto,
+  TournamentStatus,
+  VetoStateDto,
+} from "./types"
 
 /**
  * Браузерный клиент API.
@@ -66,6 +77,32 @@ export function checkIn(slug: string) {
   })
 }
 
+// ───────────────────────────── Вето карт ──────────────────────────────
+
+export function getVeto(matchId: number) {
+  return request<{ veto: VetoStateDto }>(`/matches/${matchId}/veto`)
+}
+
+/** Ход участника матча. */
+export function vetoMap(matchId: number, map: string) {
+  return request<{ veto: VetoStateDto }>(`/matches/${matchId}/veto`, {
+    method: "POST",
+    body: JSON.stringify({ map }),
+  })
+}
+
+/** Ход за сторону от лица организатора. */
+export function adminVetoMap(matchId: number, map: string) {
+  return request<{ veto: VetoStateDto }>(`/admin/matches/${matchId}/veto`, {
+    method: "POST",
+    body: JSON.stringify({ map }),
+  })
+}
+
+export function resetVeto(matchId: number) {
+  return request<{ veto: VetoStateDto }>(`/admin/matches/${matchId}/veto`, { method: "DELETE" })
+}
+
 // ─────────────────────────── Скаут-заметки ────────────────────────────
 
 export function listNotes(subject: string) {
@@ -87,6 +124,21 @@ export function deleteNote(id: number) {
 
 export function logout() {
   return request<void>(`/auth/logout`, { method: "POST" })
+}
+
+/** Подтянуть Steam и FACEIT для себя — когда ключи настроили после входа. */
+export function syncMyProfile() {
+  return request<{ player: PlayerDto; steamKey: boolean; faceitKey: boolean }>(`/auth/me/sync`, {
+    method: "POST",
+  })
+}
+
+export function syncPlayerData(id: number) {
+  return request<{ player: PlayerDto }>(`/admin/players/${id}/sync`, { method: "POST" })
+}
+
+export function syncAllPlayers() {
+  return request<{ processed: number; faceit: number }>(`/admin/players/sync`, { method: "POST" })
 }
 
 // ──────────────────────────── Админка ─────────────────────────────────
@@ -117,6 +169,90 @@ export interface MapScoreInput {
   map: string
   scoreA: number
   scoreB: number
+}
+
+export interface TournamentPatch {
+  title?: string
+  edition?: string
+  summary?: string
+  teamSize?: number
+  status?: TournamentStatus
+  slots?: number
+  startsAt?: string
+  region?: string
+  organizer?: string
+  tier?: "S" | "A" | "B"
+  ruleset?: string
+  server?: string
+  maps?: string[]
+  entryFee?: number
+  rules?: RuleBlockDto[]
+  featured?: boolean
+  drawBeforeMinutes?: number
+}
+
+export function updateTournament(slug: string, patch: TournamentPatch) {
+  return request<{ tournament: TournamentDto }>(`/admin/tournaments/${slug}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  })
+}
+
+export function deleteTournament(slug: string) {
+  return request<void>(`/admin/tournaments/${slug}`, { method: "DELETE" })
+}
+
+export function drawLineups(slug: string) {
+  return request<{ lineups: unknown[]; spread: number }>(`/admin/tournaments/${slug}/draw`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
+export function buildBracket(slug: string) {
+  return request<{ rounds: unknown[] }>(`/admin/tournaments/${slug}/bracket`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
+/** Модерация индивидуальной заявки: подтвердить, отклонить, вернуть. */
+export function moderateRegistration(
+  id: number,
+  status: ParticipantDto["status"],
+) {
+  return request<{ registration: ParticipantDto }>(`/admin/registrations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  })
+}
+
+export function resolveAppeal(id: number, status: "resolved" | "declined", resolution?: string) {
+  return request<{ appeal: AppealDto }>(`/admin/appeals/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status, resolution }),
+  })
+}
+
+export function changeAdminPassword(current: string, next: string) {
+  return request<void>(`/admin/auth/password`, {
+    method: "POST",
+    body: JSON.stringify({ current, next }),
+  })
+}
+
+export function createAdminAccount(input: { login: string; password: string; name?: string }) {
+  return request<{ admin: AdminDto }>(`/admin/auth/accounts`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function scheduleMatch(matchId: number, scheduledAt: string | null) {
+  return request<{ match: MatchDto }>(`/admin/matches/${matchId}/schedule`, {
+    method: "PATCH",
+    body: JSON.stringify({ scheduledAt }),
+  })
 }
 
 export function saveMatchScore(

@@ -23,6 +23,12 @@ import { scoreMatch } from "../services/matches.js"
 import { ACTIVE_MAP_POOL, DEFAULT_ENTRY_FEE, DEFAULT_RULES } from "../services/tournaments.js"
 
 const reset = process.argv.includes("--reset")
+/**
+ * Боевой запуск: только то, без чего платформа не работает — учетка
+ * организатора и FAQ. Демо-игроков и демо-турниры на живой сайт лить
+ * нельзя, их потом руками не вычистишь.
+ */
+const minimal = process.argv.includes("--minimal")
 
 interface SeedPlayer {
   nickname: string
@@ -427,9 +433,11 @@ async function main() {
   }
 
   tx(() => {
-    seedPlayers()
-    seedTournaments()
-    seedRegistrations()
+    if (!minimal) {
+      seedPlayers()
+      seedTournaments()
+      seedRegistrations()
+    }
     seedFaq()
   })
 
@@ -445,7 +453,10 @@ async function main() {
     lineups: (db.prepare(`SELECT COUNT(*) AS n FROM lineups`).get() as { n: number }).n,
     matches: (db.prepare(`SELECT COUNT(*) AS n FROM matches`).get() as { n: number }).n,
   }
-  console.log("[seed] готово:", stats)
+  console.log(minimal ? "[seed] боевой запуск, состояние базы:" : "[seed] готово:", stats)
+  if (minimal) {
+    console.log("[seed] демо-данные не создавались — турниры заводите через админку")
+  }
 }
 
 await main()

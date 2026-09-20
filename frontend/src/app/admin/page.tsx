@@ -102,7 +102,7 @@ export default async function AdminDashboard() {
               Апелляции
             </h2>
             <Link
-              href="/admin/matches"
+              href="/admin/appeals"
               className="text-[12px] text-white/40 transition-colors hover:text-white"
             >
               Все
@@ -130,7 +130,7 @@ export default async function AdminDashboard() {
                         {appeal.claimant ?? "аноним"}
                       </span>
                       <Button variant="outline" size="xs" asChild>
-                        <Link href="/admin/matches">Разобрать</Link>
+                        <Link href="/admin/appeals">Разобрать</Link>
                       </Button>
                     </div>
                   </li>

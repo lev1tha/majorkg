@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { FaceitLevel } from "@/components/player/faceit-level"
 import { ScoutNotes } from "@/components/scouting/scout-notes"
 import { Bracket, BracketContext } from "@/components/tournament/bracket"
+import { MapVeto } from "@/components/tournament/map-veto"
 import type { BracketRoundDto, LineupDto, LineupMemberDto, MatchDto } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -126,7 +127,17 @@ function MatchPanel({
               </div>
             </div>
 
-            {match.maps.length > 0 && (
+            {/* Вето: до игры это главное, что нужно обеим сторонам */}
+            {match.state !== "done" && match.a && match.b && (
+              <>
+                <div className="h-px bg-white/[0.07]" />
+                <div className="p-6">
+                  <MapVeto matchId={match.id} />
+                </div>
+              </>
+            )}
+
+            {match.maps.length > 0 && match.state === "done" && (
               <div className="flex flex-wrap gap-2 px-6 pb-5">
                 {match.maps.map((map) => (
                   <span

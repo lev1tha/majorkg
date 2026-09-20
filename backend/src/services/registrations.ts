@@ -213,6 +213,30 @@ export function listPending(limit: number, offset: number): PendingRegistration[
   }))
 }
 
+/**
+ * Все заявки турнира, включая отклоненные и снятые.
+ * Публичный список показывает только активные — организатору нужна
+ * полная картина, чтобы вернуть ошибочно отклоненного игрока.
+ */
+export function listAllRegistrations(slug: string): ParticipantDto[] {
+  const tournament = requireTournamentRow(slug)
+  const rows = db
+    .prepare(
+      `${PARTICIPANT_SELECT}
+        WHERE r.tournament_id = ?
+        ORDER BY
+          CASE r.status
+            WHEN 'pending' THEN 0
+            WHEN 'confirmed' THEN 1
+            WHEN 'checked_in' THEN 2
+            ELSE 3
+          END,
+          p.elo DESC`,
+    )
+    .all(tournament.id) as ParticipantRow[]
+  return rows.map(toParticipantDto)
+}
+
 /** Турниры игрока — для страницы «Мои заявки». */
 export function listPlayerRegistrations(playerId: number) {
   return db

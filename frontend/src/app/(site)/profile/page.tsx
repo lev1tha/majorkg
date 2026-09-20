@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/layout/page-header"
 import { FaceitLevel } from "@/components/player/faceit-level"
 import { PlayerAvatar } from "@/components/player/avatar"
+import { FaceitSync } from "@/components/player/faceit-sync"
 import { getPlayer, getViewer, getViewerRegistrations } from "@/lib/api"
 import { formatDateTime, formatNumber } from "@/lib/utils"
 
@@ -112,21 +113,19 @@ export default async function ProfilePage() {
           </dl>
 
           {viewer && (
-            <>
-              {!viewer.steamSynced && (
-                <p className="mt-5 rounded-[10px] border border-white/[0.07] bg-white/[0.02] p-3 text-[12px] leading-relaxed text-white/35">
-                  Ник и аватар из Steam не подтянуты: на бэкенде не задан STEAM_API_KEY. Сам вход
-                  работает и без него, но Valve отдает только SteamID64.
-                </p>
-              )}
-              <div className="mt-6 flex flex-wrap gap-2.5 border-t border-white/[0.07] pt-5">
-                <Button variant="outline" size="md" asChild>
-                  <Link href={`/players/${viewer.nickname}`}>Публичный профиль</Link>
-                </Button>
-              </div>
-            </>
+            <div className="mt-6 flex flex-wrap gap-2.5 border-t border-white/[0.07] pt-5">
+              <Button variant="outline" size="md" asChild>
+                <Link href={`/players/${viewer.nickname}`}>Публичный профиль</Link>
+              </Button>
+            </div>
           )}
         </div>
+
+        {viewer && player && (
+          <div className="max-w-2xl">
+            <FaceitSync player={player} steamSynced={viewer.steamSynced} />
+          </div>
+        )}
 
         {viewer && (
           <section id="registrations" className="flex max-w-3xl scroll-mt-24 flex-col gap-4">

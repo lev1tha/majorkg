@@ -16,8 +16,12 @@ CREATE TABLE IF NOT EXISTS players (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   steam_id      TEXT    NOT NULL UNIQUE,
   nickname      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+  -- Ник на FACEIT и его внутренний id. Привязываются по SteamID64 при
+  -- входе: FACEIT хранит SteamID в games.cs2.game_player_id.
   faceit        TEXT,
+  faceit_id     TEXT,
   avatar        TEXT,
+  faceit_avatar TEXT,
   role          TEXT    NOT NULL DEFAULT 'Rifler',
   country       TEXT    NOT NULL DEFAULT 'KG',
   city          TEXT,
@@ -158,6 +162,24 @@ CREATE TABLE IF NOT EXISTS match_maps (
   score_b       INTEGER NOT NULL DEFAULT 0,
   UNIQUE (match_id, ordinal)
 );
+
+-- ─────────────────────── Вето карт (ban/pick) ─────────────────────────
+-- Хранятся только сделанные ходы. План вето (кто банит, кто пикает и в
+-- каком порядке) выводится из формата серии и размера пула — держать его
+-- в базе значило бы дублировать правило, которое и так однозначно.
+
+CREATE TABLE IF NOT EXISTS match_veto (
+  match_id      INTEGER NOT NULL REFERENCES matches (id) ON DELETE CASCADE,
+  ordinal       INTEGER NOT NULL,
+  action        TEXT    NOT NULL CHECK (action IN ('ban', 'pick')),
+  side          TEXT    NOT NULL CHECK (side IN ('a', 'b')),
+  map           TEXT    NOT NULL,
+  by_player_id  INTEGER          REFERENCES players (id) ON DELETE SET NULL,
+  created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  PRIMARY KEY (match_id, ordinal)
+);
+
+CREATE INDEX IF NOT EXISTS idx_veto_match ON match_veto (match_id, ordinal);
 
 -- ───────────────────────────── Апелляции ──────────────────────────────
 

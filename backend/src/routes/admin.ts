@@ -15,14 +15,17 @@ import {
   scoreMatch,
   setMatchState,
 } from "../services/matches.js"
-import { listPlayers, setPlayerStatus } from "../services/players.js"
-import { listPending, moderate } from "../services/registrations.js"
+import { syncAllPlayers } from "../services/faceit-sync.js"
+import { listPlayers, refreshPlayer, setPlayerStatus } from "../services/players.js"
+import { listAllRegistrations, listPending, moderate } from "../services/registrations.js"
 import {
   createTournament,
   deleteTournament,
+  getTournament,
   listTournaments,
   updateTournament,
 } from "../services/tournaments.js"
+import { makeVetoMove, resetVeto, serverQueue } from "../services/veto.js"
 import type { AdminOverviewDto } from "../types.js"
 
 export const adminRouter = Router()
@@ -103,6 +106,22 @@ adminRouter.get(
   handler((req, res) => {
     const { limit, offset } = parsePage(req.query, 50)
     res.json(listTournaments({ limit, offset, includeDrafts: true, q: str(req.query.q) }))
+  }),
+)
+
+/** Один турнир, включая черновики — карточка редактирования. */
+adminRouter.get(
+  "/tournaments/:slug",
+  handler((req, res) => {
+    res.json({ tournament: getTournament(param(req, "slug")) })
+  }),
+)
+
+/** Все заявки турнира, включая отклоненные и снятые. */
+adminRouter.get(
+  "/tournaments/:slug/registrations",
+  handler((req, res) => {
+    res.json({ items: listAllRegistrations(param(req, "slug")) })
   }),
 )
 
@@ -256,6 +275,32 @@ adminRouter.patch(
   }),
 )
 
+// ──────────────────────────── Вето карт ──────────────────────────────
+
+/** Ход за сторону — когда состав не выходит на связь. */
+adminRouter.post(
+  "/matches/:id/veto",
+  handler((req, res) => {
+    const { map } = z.object({ map: z.string().min(1).max(40) }).parse(req.body)
+    res.json({ veto: makeVetoMove({ matchId: matchId(param(req, "id")), map, asAdmin: true }) })
+  }),
+)
+
+adminRouter.delete(
+  "/matches/:id/veto",
+  handler((req, res) => {
+    res.json({ veto: resetVeto(matchId(param(req, "id"))) })
+  }),
+)
+
+/** Что готовить на серверах: карты по матчам, которым еще играть. */
+adminRouter.get(
+  "/tournaments/:slug/servers",
+  handler((req, res) => {
+    res.json({ items: serverQueue(param(req, "slug")) })
+  }),
+)
+
 // ─────────────────────────────── FAQ ──────────────────────────────────
 
 const faqSchema = z.object({
@@ -305,6 +350,24 @@ adminRouter.get(
   handler((req, res) => {
     const { limit, offset } = parsePage(req.query, 50)
     res.json(listPlayers({ q: str(req.query.q), limit, offset, includeBanned: true }))
+  }),
+)
+
+/** Подтянуть Steam и FACEIT для одного игрока. */
+adminRouter.post(
+  "/players/:id/sync",
+  handler(async (req, res) => {
+    const id = Number(param(req, "id"))
+    if (!Number.isInteger(id)) throw ApiError.badRequest("Некорректный идентификатор игрока")
+    res.json({ player: await refreshPlayer(id) })
+  }),
+)
+
+/** Пакетное обновление: идет последовательно из-за лимитов FACEIT. */
+adminRouter.post(
+  "/players/sync",
+  handler(async (_req, res) => {
+    res.json(await syncAllPlayers())
   }),
 )
 

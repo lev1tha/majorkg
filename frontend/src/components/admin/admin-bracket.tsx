@@ -10,6 +10,7 @@ import { Input, Select } from "@/components/ui/input"
 import { TeamMark } from "@/components/ui/misc"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Bracket, BracketContext } from "@/components/tournament/bracket"
+import { MapVeto } from "@/components/tournament/map-veto"
 import {
   ApiError,
   declareWinner,
@@ -136,6 +137,13 @@ function WinnerDialog({
                 Победитель сразу встает в следующий раунд. Без счета по картам серия
                 записывается как 1:0 — счет можно уточнить ниже в любой момент.
               </p>
+            </div>
+
+            <div className="h-px bg-white/[0.07]" />
+
+            {/* Вето: организатор видит, что готовить на сервере */}
+            <div className="p-6">
+              <MapVeto matchId={match.id} admin />
             </div>
 
             <div className="h-px bg-white/[0.07]" />

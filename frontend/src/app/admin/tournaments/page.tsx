@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Plus } from "lucide-react"
+import { Pencil, Plus } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -45,7 +45,7 @@ export default async function AdminTournamentsPage() {
             >
               <div className="min-w-0">
                 <Link
-                  href={`/tournaments/${row.slug}`}
+                  href={`/admin/tournaments/${row.slug}`}
                   className="truncate text-[13.5px] font-medium text-white transition-colors hover:text-accent-soft"
                 >
                   {row.title}
@@ -66,8 +66,13 @@ export default async function AdminTournamentsPage() {
                 {formatDateTime(row.startsAt)}
               </span>
 
-              <div className="flex shrink-0 justify-end">
+              <div className="flex shrink-0 items-center justify-end gap-2">
                 <TournamentActions slug={row.slug} status={row.status} />
+                <Button variant="ghost" size="xs" asChild>
+                  <Link href={`/admin/tournaments/${row.slug}`}>
+                    <Pencil strokeWidth={1.5} />
+                  </Link>
+                </Button>
               </div>
             </li>
           ))}

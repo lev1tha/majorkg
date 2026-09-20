@@ -6,6 +6,7 @@ import { requireAuth, viewerOf } from "../middleware/auth.js"
 import { rateLimit } from "../middleware/rate-limit.js"
 import { getMatch, listMatches } from "../services/bracket.js"
 import { createAppeal } from "../services/matches.js"
+import { getVeto, makeVetoMove } from "../services/veto.js"
 import type { MatchState } from "../types.js"
 
 export const matchesRouter = Router()
@@ -33,6 +34,29 @@ matchesRouter.get(
     const id = Number(param(req, "id"))
     if (!Number.isInteger(id)) throw ApiError.badRequest("Некорректный идентификатор матча")
     res.json({ match: getMatch(id) })
+  }),
+)
+
+/** Состояние вето: видно всем, ходить могут участники матча. */
+matchesRouter.get(
+  "/:id/veto",
+  handler((req, res) => {
+    const id = Number(param(req, "id"))
+    if (!Number.isInteger(id)) throw ApiError.badRequest("Некорректный идентификатор матча")
+    res.json({ veto: getVeto(id, req.viewer?.id) })
+  }),
+)
+
+matchesRouter.post(
+  "/:id/veto",
+  requireAuth,
+  rateLimit({ max: 40 }),
+  handler((req, res) => {
+    const id = Number(param(req, "id"))
+    if (!Number.isInteger(id)) throw ApiError.badRequest("Некорректный идентификатор матча")
+
+    const { map } = z.object({ map: z.string().min(1).max(40) }).parse(req.body)
+    res.json({ veto: makeVetoMove({ matchId: id, map, playerId: viewerOf(req).id }) })
   }),
 )
 
