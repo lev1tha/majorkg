@@ -3,13 +3,14 @@ import Link from "next/link"
 import { CircleAlert, Gamepad2, Lock, ShieldCheck, Zap } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { PasswordAuth } from "@/components/player/password-auth"
 import { JsonLd } from "@/components/seo/json-ld"
 import { breadcrumbLd } from "@/lib/seo"
 
 export const metadata: Metadata = {
-  title: "Вход через Steam",
+  title: "Вход",
   description:
-    "Авторизация на MAJOR KG только через Steam. После входа FACEIT ELO и уровень подтягиваются автоматически, а Steam ID сверяется с заявкой на турнир.",
+    "Вход на MAJOR KG через Steam или по нику и паролю. После входа FACEIT ELO и уровень подтягиваются автоматически, а Steam ID сверяется с заявкой на турнир.",
   alternates: { canonical: "/login" },
   robots: { index: false, follow: true },
 }
@@ -17,8 +18,8 @@ export const metadata: Metadata = {
 const POINTS = [
   {
     icon: ShieldCheck,
-    title: "Только Steam",
-    text: "Пароль остается у Valve — платформа получает лишь ваш SteamID64.",
+    title: "Steam — надежнее всего",
+    text: "Пароль остается у Valve — платформа получает лишь ваш SteamID64. Нет Steam под рукой — есть вход по нику.",
   },
   {
     icon: Zap,
@@ -46,11 +47,12 @@ export default async function LoginPage({
         <div className="mx-auto grid w-full max-w-4xl gap-10 lg:grid-cols-2 lg:items-center">
           <div className="flex flex-col gap-6">
             <h1 className="font-display text-[34px] font-extrabold leading-[1.05] tracking-[-0.035em] text-white sm:text-[42px]">
-              Вход через Steam
+              Вход на MAJOR KG
             </h1>
             <p className="text-[14px] leading-relaxed text-white/45">
               Один аккаунт на всю платформу: заявки на турниры, жеребьевка составов и рейтинг
-              привязаны к вашему Steam ID. Отдельная регистрация не нужна.
+              привязаны к вашему Steam ID. Через Steam регистрация не нужна — или заведите
+              аккаунт по нику и паролю.
             </p>
 
             <ul className="flex flex-col gap-4">
@@ -97,6 +99,14 @@ export default async function LoginPage({
               Используется OpenID 2.0 — официальный механизм Valve. Платформа не видит и не хранит
               ваш пароль.
             </p>
+
+            <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.16em] text-white/25">
+              <span className="h-px flex-1 bg-white/[0.07]" />
+              или без Steam
+              <span className="h-px flex-1 bg-white/[0.07]" />
+            </div>
+
+            <PasswordAuth />
 
             <p className="border-t border-white/[0.07] pt-4 text-[12px] leading-relaxed text-white/30">
               Продолжая, вы принимаете{" "}

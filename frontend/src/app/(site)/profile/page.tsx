@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/layout/page-header"
 import { FaceitLevel } from "@/components/player/faceit-level"
 import { PlayerAvatar } from "@/components/player/avatar"
 import { FaceitSync } from "@/components/player/faceit-sync"
+import { BattleSoundTest } from "@/components/player/battle-alert"
+import { PasswordForm, ProfileForm } from "@/components/player/profile-form"
 import { getPlayer, getViewer, getViewerRegistrations } from "@/lib/api"
 import { formatDateTime, formatNumber } from "@/lib/utils"
 
@@ -38,8 +40,8 @@ export default async function ProfilePage() {
         title="Профиль"
         description={
           viewer
-            ? "Steam подключен. FACEIT-рейтинг обновляется автоматически."
-            : "Войдите через Steam, чтобы подавать заявки от своего аккаунта и вести скаут-заметки."
+            ? "Ник, Steam и контакты можно поправить ниже. FACEIT-рейтинг обновляется автоматически."
+            : "Войдите через Steam или по нику, чтобы подавать заявки от своего аккаунта и вести скаут-заметки."
         }
         action={
           viewer ? (
@@ -51,10 +53,10 @@ export default async function ProfilePage() {
             </form>
           ) : (
             <Button variant="primary" size="md" asChild>
-              <a href="/api/auth/steam" rel="nofollow">
+              <Link href="/login">
                 <Gamepad2 strokeWidth={1.5} />
-                Войти через Steam
-              </a>
+                Войти
+              </Link>
             </Button>
           )
         }
@@ -76,8 +78,12 @@ export default async function ProfilePage() {
                 {viewer ? viewer.steamId : "Steam не подключен"}
               </p>
             </div>
-            <Badge variant={viewer ? "success" : "outline"} size="sm" className="ml-auto">
-              {viewer ? "Подключен" : "Гостевой режим"}
+            <Badge
+              variant={!viewer ? "outline" : viewer.steamVerified ? "success" : "prize"}
+              size="sm"
+              className="ml-auto"
+            >
+              {!viewer ? "Гостевой режим" : viewer.steamVerified ? "Подключен" : "Steam не подтвержден"}
             </Badge>
           </div>
 
@@ -120,6 +126,14 @@ export default async function ProfilePage() {
             </div>
           )}
         </div>
+
+        {viewer && (
+          <div className="flex max-w-2xl flex-col gap-8">
+            <BattleSoundTest />
+            <ProfileForm viewer={viewer} />
+            <PasswordForm hasPassword={viewer.hasPassword} />
+          </div>
+        )}
 
         {viewer && player && (
           <div className="max-w-2xl">

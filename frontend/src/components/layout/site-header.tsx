@@ -17,6 +17,7 @@ const NAV = [
   { label: "Турниры", href: "/tournaments" },
   { label: "MIX", href: "/mix" },
   { label: "Сетка", href: "/bracket" },
+  { label: "Серверы", href: "/servers" },
   { label: "Игроки", href: "/players" },
   { label: "Лидерборд", href: "/leaderboard" },
   { label: "FAQ", href: "/faq" },
@@ -155,11 +156,11 @@ export function SiteHeader({ viewer }: { viewer: ViewerDto | null }) {
             <ProfileMenu viewer={viewer} />
           ) : (
             <Button variant="outline" size="sm" asChild>
-              {/* Полная перезагрузка: OpenID-редирект нельзя проходить через router */}
-              <a href="/api/auth/steam" rel="nofollow">
+              {/* На странице входа — и Steam, и вход по нику */}
+              <Link href="/login">
                 <Gamepad2 strokeWidth={1.5} />
-                Войти через Steam
-              </a>
+                Войти
+              </Link>
             </Button>
           )}
           <button

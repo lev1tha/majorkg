@@ -9,7 +9,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const updated = new Date()
   const { items } = await getTournaments({ limit: 200 })
 
-  const staticPages = ["/", "/tournaments", "/bracket", "/players", "/leaderboard", "/mix", "/faq"]
+  const staticPages = ["/", "/tournaments", "/bracket", "/servers", "/players", "/leaderboard", "/mix", "/faq"]
 
   return [
     ...staticPages.map((path) => ({

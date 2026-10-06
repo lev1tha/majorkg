@@ -23,14 +23,16 @@ export function FaceitSync({ player, steamSynced }: { player: PlayerDto; steamSy
   const router = useRouter()
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const [keys, setKeys] = React.useState<{ steam: boolean; faceit: boolean } | null>(null)
+  const [faceitKey, setFaceitKey] = React.useState<boolean | null>(null)
+  const [steamOk, setSteamOk] = React.useState(steamSynced)
 
   const sync = async () => {
     setBusy(true)
     setError(null)
     try {
       const result = await syncMyProfile()
-      setKeys({ steam: result.steamKey, faceit: result.faceitKey })
+      setFaceitKey(result.faceitKey)
+      setSteamOk(result.steamSynced)
       router.refresh()
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "Не удалось обновить данные")
@@ -123,21 +125,19 @@ export function FaceitSync({ player, steamSynced }: { player: PlayerDto; steamSy
             <li>· Затем нажмите «Обновить».</li>
           </ul>
 
-          {keys && (!keys.faceit || !keys.steam) && (
+          {faceitKey === false && (
             <p className="rounded-[10px] border border-prize/20 bg-prize/[0.06] p-3 text-[12px] leading-relaxed text-prize/85">
-              На сервере не настроены ключи:{" "}
-              {[!keys.steam && "STEAM_API_KEY", !keys.faceit && "FACEIT_API_KEY"]
-                .filter(Boolean)
-                .join(" и ")}
-              . Без них платформа не может запросить данные — это настраивает организатор.
+              На сервере не настроен FACEIT_API_KEY. Без него платформа не может запросить
+              рейтинг — это настраивает организатор.
             </p>
           )}
         </div>
       )}
 
-      {!steamSynced && (
+      {!steamOk && (
         <p className="rounded-[10px] border border-white/[0.07] bg-white/[0.02] p-3 text-[12px] leading-relaxed text-white/35">
-          Ник и аватар из Steam тоже не подтянуты: не задан STEAM_API_KEY.
+          Ник и аватар из Steam пока не подтянуты: Steam не ответил. Нажмите «Обновить» через
+          минуту.
         </p>
       )}
 

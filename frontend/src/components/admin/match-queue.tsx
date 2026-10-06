@@ -2,14 +2,15 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Check, Gavel, Loader2, ShieldX } from "lucide-react"
+import { CalendarClock, Check, Gavel, Loader2, ShieldX } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
+import { ApiError, scheduleMatch } from "@/lib/api-client"
 import type { MatchDto, MatchState } from "@/lib/types"
-import { cn, plural } from "@/lib/utils"
+import { cn, formatDateTime, plural } from "@/lib/utils"
 
 const STATE: Record<MatchState, { label: string; variant: "live" | "prize" | "outline" | "success" }> = {
   live: { label: "Идет", variant: "live" },
@@ -22,6 +23,16 @@ interface MapRow {
   map: string
   scoreA: number
   scoreB: number
+}
+
+/** ISO → значение для datetime-local в таймзоне турниров. */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return ""
+  const ms = Date.parse(iso)
+  if (!Number.isFinite(ms)) return ""
+  const shifted = new Date(ms + 6 * 60 * 60_000)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}T${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`
 }
 
 /**
@@ -40,6 +51,8 @@ function ResultDialog({
   const router = useRouter()
   const [maps, setMaps] = React.useState<MapRow[]>([])
   const [saving, setSaving] = React.useState(false)
+  const [scheduling, setScheduling] = React.useState(false)
+  const [slot, setSlot] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
@@ -49,8 +62,24 @@ function ResultDialog({
         ? match.maps.map((item) => ({ ...item }))
         : [{ map: mapPool[0] ?? "Mirage", scoreA: 0, scoreB: 0 }],
     )
+    setSlot(toLocalInput(match.scheduledAt))
     setError(null)
   }, [match, mapPool])
+
+  /** Время матча правится в таймзоне турниров (Бишкек, UTC+6). */
+  const saveSchedule = async () => {
+    if (!match) return
+    setScheduling(true)
+    setError(null)
+    try {
+      await scheduleMatch(match.id, slot ? new Date(`${slot}:00+06:00`).toISOString() : null)
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "Не удалось сохранить время")
+    } finally {
+      setScheduling(false)
+    }
+  }
 
   const update = (index: number, key: "scoreA" | "scoreB", value: number) => {
     setMaps((prev) =>
@@ -99,6 +128,41 @@ function ResultDialog({
               <DialogDescription className="mt-1">
                 M-{match.id} · {match.roundName} · {match.format}
               </DialogDescription>
+            </div>
+
+            <div className="h-px bg-white/[0.07]" />
+
+            {/* Время матча: по нему команды понимают, когда выходить */}
+            <div className="flex flex-wrap items-end gap-3 p-6">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/30">
+                  Время матча (GMT+6)
+                </span>
+                <Input
+                  type="datetime-local"
+                  value={slot}
+                  onChange={(event) => setSlot(event.target.value)}
+                  className="h-10 w-[230px]"
+                />
+              </label>
+              <Button
+                variant="outline"
+                size="md"
+                disabled={scheduling}
+                onClick={() => void saveSchedule()}
+              >
+                {scheduling ? (
+                  <Loader2 strokeWidth={1.5} className="animate-spin" />
+                ) : (
+                  <CalendarClock strokeWidth={1.5} />
+                )}
+                Назначить
+              </Button>
+              {match.scheduledAt && (
+                <span className="mono self-center text-[11.5px] text-white/30">
+                  сейчас: {formatDateTime(match.scheduledAt)}
+                </span>
+              )}
             </div>
 
             <div className="h-px bg-white/[0.07]" />
@@ -242,6 +306,9 @@ export function MatchQueue({ matches, mapPool }: { matches: MatchDto[]; mapPool:
                   className="flex flex-wrap items-center gap-4 px-5 py-3.5 transition-colors hover:bg-white/[0.02]"
                 >
                   <span className="mono w-16 shrink-0 text-[11.5px] text-white/30">M-{match.id}</span>
+                  <span className="mono hidden w-32 shrink-0 text-[11.5px] text-white/35 lg:block">
+                    {match.scheduledAt ? formatDateTime(match.scheduledAt) : "без времени"}
+                  </span>
                   <span className="w-28 shrink-0 truncate text-[12px] text-white/45">
                     {match.roundName}
                   </span>

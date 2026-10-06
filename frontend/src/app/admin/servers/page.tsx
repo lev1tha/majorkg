@@ -1,13 +1,15 @@
 import { AdminPageTitle } from "@/components/admin/admin-shell"
 import { ServerQueue } from "@/components/admin/server-queue"
+import { ServerRegistry } from "@/components/admin/server-registry"
 import { TournamentPicker } from "@/components/admin/tournament-picker"
-import { getAdminTournaments, getServerQueue } from "@/lib/api"
+import { getAdminServers, getAdminTournaments, getServerQueue } from "@/lib/api"
 
 /**
- * Что готовить на серверах.
+ * Серверы: свои машины и что на них готовить.
  *
- * Вето закончилось — известен порядок карт; не закончилось — известно,
- * чьего хода ждем. Это и есть ответ на вопрос «какие карты ставить».
+ * Сверху реестр с живым состоянием по A2S, снизу — очередь матчей с
+ * картами после вето. Вместе это отвечает на вопрос «что ставить прямо
+ * сейчас и куда».
  */
 export default async function AdminServersPage({
   searchParams,
@@ -15,7 +17,7 @@ export default async function AdminServersPage({
   searchParams: Promise<{ tournament?: string }>
 }) {
   const { tournament: requested } = await searchParams
-  const { items } = await getAdminTournaments()
+  const [servers, { items }] = await Promise.all([getAdminServers(), getAdminTournaments()])
 
   const active =
     items.find((item) => item.slug === requested) ??
@@ -30,21 +32,21 @@ export default async function AdminServersPage({
     <>
       <AdminPageTitle
         title="Серверы"
-        description="Карты предстоящих матчей после вето. Готовится ровно то, во что будут играть."
+        description="Свои машины и карты предстоящих матчей после вето. Состояние спрашивается у сервера напрямую."
       />
 
-      <TournamentPicker
-        tournaments={items}
-        active={active}
-        basePath="/admin/servers"
-        empty="Турниров еще нет — готовить пока нечего."
-      />
+      <ServerRegistry servers={servers} />
 
-      {active && (
-        <div className="mt-5">
-          <ServerQueue items={queue} server={active.server} slug={active.slug} />
-        </div>
-      )}
+      <div className="mt-10 flex flex-col gap-4">
+        <h2 className="font-display text-[17px] font-bold text-white">Что готовить</h2>
+        <TournamentPicker
+          tournaments={items}
+          active={active}
+          basePath="/admin/servers"
+          empty="Турниров еще нет — готовить пока нечего."
+        />
+        {active && <ServerQueue items={queue} server={active.server} slug={active.slug} />}
+      </div>
     </>
   )
 }

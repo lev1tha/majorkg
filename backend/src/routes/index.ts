@@ -8,6 +8,7 @@ import { leaderboardRouter } from "./leaderboard.js"
 import { matchesRouter } from "./matches.js"
 import { notesRouter } from "./notes.js"
 import { playersRouter } from "./players.js"
+import { serversRouter } from "./servers.js"
 import { tournamentsRouter } from "./tournaments.js"
 
 export const api = Router()
@@ -20,6 +21,7 @@ api.use("/auth", authRouter)
 // Вход организатора живет до requireAdmin: иначе войти было бы нечем.
 api.use("/admin/auth", adminAuthRouter)
 api.use("/faq", faqRouter)
+api.use("/servers", serversRouter)
 api.use("/tournaments", tournamentsRouter)
 api.use("/players", playersRouter)
 api.use("/leaderboard", leaderboardRouter)

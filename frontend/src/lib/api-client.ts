@@ -2,12 +2,15 @@
 
 import type {
   AdminDto,
+  AdminParticipantDto,
   AppealDto,
   MatchDto,
   ParticipantDto,
   PlayerDto,
   RuleBlockDto,
+  MatchConfigDto,
   ScoutNoteDto,
+  ServerDto,
   TournamentDto,
   TournamentStatus,
   VetoStateDto,
@@ -77,6 +80,60 @@ export function checkIn(slug: string) {
   })
 }
 
+// ──────────────────────── Игровые серверы ─────────────────────────────
+
+export interface ServerInput {
+  name: string
+  host: string
+  port?: number
+  rconPassword?: string | null
+  location?: string
+  public?: boolean
+  active?: boolean
+  note?: string
+}
+
+export function createServer(input: ServerInput) {
+  return request<{ server: ServerDto }>(`/admin/servers`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateServer(id: number, patch: Partial<ServerInput>) {
+  return request<{ server: ServerDto }>(`/admin/servers/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  })
+}
+
+export function deleteServer(id: number) {
+  return request<void>(`/admin/servers/${id}`, { method: "DELETE" })
+}
+
+/** Спросить сервер прямо сейчас, минуя кэш состояния. */
+export function checkServer(id: number) {
+  return request<{ server: ServerDto }>(`/admin/servers/${id}/check`, { method: "POST" })
+}
+
+export function assignMatchServer(matchId: number, serverId: number | null) {
+  return request<{ config: MatchConfigDto | null }>(`/admin/matches/${matchId}/server`, {
+    method: "PATCH",
+    body: JSON.stringify({ serverId }),
+  })
+}
+
+export function getMatchConfig(matchId: number) {
+  return request<{ config: MatchConfigDto }>(`/admin/matches/${matchId}/config`)
+}
+
+/** Выкатить конфиг матча на сервер по RCON. */
+export function pushMatchConfig(matchId: number) {
+  return request<{ sent: string[]; output: string[] }>(`/admin/matches/${matchId}/config`, {
+    method: "POST",
+  })
+}
+
 // ───────────────────────────── Вето карт ──────────────────────────────
 
 export function getVeto(matchId: number) {
@@ -128,8 +185,40 @@ export function logout() {
 
 /** Подтянуть Steam и FACEIT для себя — когда ключи настроили после входа. */
 export function syncMyProfile() {
-  return request<{ player: PlayerDto; steamKey: boolean; faceitKey: boolean }>(`/auth/me/sync`, {
+  return request<{ player: PlayerDto; steamSynced: boolean; faceitKey: boolean }>(`/auth/me/sync`, {
     method: "POST",
+  })
+}
+
+/** Регистрация без Steam: ник, пароль и ссылка на профиль Steam. */
+export function registerPlayer(input: { nickname: string; password: string; steam: string }) {
+  return request<{ ok: true }>(`/auth/register`, { method: "POST", body: JSON.stringify(input) })
+}
+
+export function loginPlayer(nickname: string, password: string) {
+  return request<{ ok: true }>(`/auth/login`, {
+    method: "POST",
+    body: JSON.stringify({ nickname, password }),
+  })
+}
+
+export interface ProfileInput {
+  nickname?: string
+  steam?: string
+  telegram?: string
+  discord?: string
+  city?: string
+  role?: string
+}
+
+export function updateMyProfile(input: ProfileInput) {
+  return request<{ ok: true }>(`/auth/me`, { method: "PATCH", body: JSON.stringify(input) })
+}
+
+export function setMyPassword(next: string, current?: string) {
+  return request<void>(`/auth/me/password`, {
+    method: "POST",
+    body: JSON.stringify({ next, current }),
   })
 }
 
@@ -224,6 +313,22 @@ export function moderateRegistration(
   return request<{ registration: ParticipantDto }>(`/admin/registrations/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
+  })
+}
+
+/** «Созвать участников»: у подтвержденных с открытым сайтом трубит рог. */
+export function rallyTournament(slug: string) {
+  return request<{ rallyAt: string; recipients: number }>(`/admin/tournaments/${slug}/rally`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  })
+}
+
+/** Отметка «взнос оплачен» — только для турнира этой заявки. */
+export function setRegistrationPaid(id: number, paid: boolean) {
+  return request<{ registration: AdminParticipantDto }>(`/admin/registrations/${id}/payment`, {
+    method: "PATCH",
+    body: JSON.stringify({ paid }),
   })
 }
 

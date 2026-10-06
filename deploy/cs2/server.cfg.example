@@ -1,0 +1,40 @@
+// Конфиг сервера MAJOR KG.
+// Копировать в ~/cs2/game/csgo/cfg/server.cfg и вписать свои пароли.
+
+hostname "MAJOR KG #1 · Bishkek"
+
+// RCON: им платформа выкатывает карту после вето.
+// Пароль должен совпасть с тем, что вписан в /admin/servers.
+rcon_password "СМЕНИТЕ_МЕНЯ"
+
+// Пустой пароль — сервер открыт. Матчи платформа закрывает сама,
+// выставляя sv_password на время серии.
+sv_password ""
+
+// Регламент MR12 с овертаймом — то же, что стоит в правилах турнира.
+mp_maxrounds 24
+mp_overtime_enable 1
+mp_overtime_maxrounds 6
+mp_overtime_startmoney 12500
+mp_match_can_clinch 1
+mp_match_end_restart 1
+
+// Разминка до готовности обеих сторон.
+mp_warmuptime 300
+mp_warmup_pausetimer 1
+
+// Тайм-ауты: по регламенту не более 10 минут суммарно на команду.
+mp_team_timeout_time 60
+mp_team_timeout_max 4
+
+// Запись каждой карты: демо нужны для разбора апелляций.
+tv_enable 1
+tv_delay 105
+tv_autorecord 1
+
+// Автобаланс и автокик выключены: составы определяет жеребьевка,
+// сервер не должен их перетасовывать.
+mp_autoteambalance 0
+mp_autokick 0
+
+sv_hibernate_when_empty 0

@@ -49,10 +49,11 @@ export default async function AdminDashboard() {
     },
     {
       id: "fees",
-      label: "Ожидаемые взносы",
-      value: `${formatNumber(overview?.expectedFees ?? 0)} сом`,
+      label: "Взносы",
+      value: formatNumber(overview?.collectedFees ?? 0),
+      suffix: `/ ${formatNumber(overview?.expectedFees ?? 0)} сом`,
       delta: 0,
-      deltaLabel: "по подтвержденным заявкам",
+      deltaLabel: "отмечено оплаченными из ожидаемых",
     },
     {
       id: "appeals",
@@ -86,6 +87,7 @@ export default async function AdminDashboard() {
             value={tile.value}
             delta={tile.delta}
             deltaLabel={tile.deltaLabel}
+            suffix={"suffix" in tile ? tile.suffix : undefined}
           />
         ))}
       </div>

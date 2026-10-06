@@ -13,6 +13,7 @@ const COLUMNS = [
       { label: "Лидерборд", href: "/leaderboard" },
       { label: "Турнирная сетка", href: "/bracket" },
       { label: "MIX-турниры", href: "/mix" },
+      { label: "Игровые серверы", href: "/servers" },
     ],
   },
   {

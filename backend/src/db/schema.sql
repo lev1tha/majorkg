@@ -43,6 +43,20 @@ CREATE TABLE IF NOT EXISTS players (
 
   status        TEXT    NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'review', 'banned')),
   elo_synced_at TEXT,
+  -- Когда ник и аватар последний раз пришли из Steam. NULL — ни разу.
+  steam_synced_at TEXT,
+
+  -- Вход по нику и паролю — запасной путь, когда Steam под рукой нет.
+  -- NULL — входит только через Steam.
+  password_hash TEXT,
+  -- 1 — игрок входил через Steam, то есть SteamID доказан. 0 — ссылку на
+  -- Steam ввели вручную при регистрации, судья сверяет ее сам.
+  steam_verified INTEGER NOT NULL DEFAULT 1,
+  -- 1 — ник задан на сайте, синхронизация со Steam его не трогает.
+  nickname_custom INTEGER NOT NULL DEFAULT 0,
+  -- Контакты для организатора: публично не показываются.
+  telegram      TEXT,
+  discord       TEXT,
   created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
@@ -81,6 +95,9 @@ CREATE TABLE IF NOT EXISTS tournaments (
   featured      INTEGER NOT NULL DEFAULT 0,
   -- За сколько минут до старта запускается жеребьевка составов.
   draw_before_minutes INTEGER NOT NULL DEFAULT 20,
+  -- Когда организатор последний раз «трубил сбор»: подтвержденные
+  -- участники с открытым сайтом слышат сигнал к бою.
+  rally_at      TEXT,
   created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
@@ -97,6 +114,9 @@ CREATE TABLE IF NOT EXISTS registrations (
   -- Посев внутри турнира, проставляется при жеребьевке.
   seed          INTEGER,
   note          TEXT,
+  -- Когда организатор отметил взнос оплаченным. Отметка живет на заявке,
+  -- то есть на одном турнире: в следующий турнир игрок приходит без нее.
+  paid_at       TEXT,
   created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   updated_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   UNIQUE (tournament_id, player_id)
@@ -127,6 +147,29 @@ CREATE TABLE IF NOT EXISTS lineup_members (
 
 CREATE INDEX IF NOT EXISTS idx_lineups_tournament ON lineups (tournament_id, seed);
 
+-- ─────────────────────── Игровые серверы ──────────────────────────────
+-- Реестр своих серверов: куда отправлять матч и что показывать игрокам.
+-- Пароль RCON наружу не отдается никогда — только бэкенд им пользуется.
+
+CREATE TABLE IF NOT EXISTS servers (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT    NOT NULL,
+  host          TEXT    NOT NULL,
+  port          INTEGER NOT NULL DEFAULT 27015,
+  rcon_password TEXT,
+  -- Где физически стоит: влияет на пинг, поэтому видно игроку.
+  location      TEXT    NOT NULL DEFAULT 'Бишкек',
+  -- Публичный: показывается на странице серверов и открыт для всех.
+  public        INTEGER NOT NULL DEFAULT 1,
+  -- Выключенный не предлагается под матчи и скрыт с сайта.
+  active        INTEGER NOT NULL DEFAULT 1,
+  note          TEXT    NOT NULL DEFAULT '',
+  created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+  UNIQUE (host, port)
+);
+
+CREATE INDEX IF NOT EXISTS idx_servers_active ON servers (active, public);
+
 -- ──────────────── Верхняя сетка: раунды и матчи ───────────────────────
 
 CREATE TABLE IF NOT EXISTS matches (
@@ -146,6 +189,7 @@ CREATE TABLE IF NOT EXISTS matches (
   scheduled_at  TEXT,
   note          TEXT    NOT NULL DEFAULT '',
   proof         INTEGER NOT NULL DEFAULT 0,
+  server_id     INTEGER          REFERENCES servers (id) ON DELETE SET NULL,
   updated_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
   UNIQUE (tournament_id, round, position)
 );

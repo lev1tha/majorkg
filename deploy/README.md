@@ -15,6 +15,8 @@
 `/api/*` отдается бэкенду напрямую, а не через `rewrites` Next.js: на один
 сетевой хоп меньше, а cookie сессии все равно остается same-origin.
 
+Игровые серверы CS2 — отдельно: [`cs2/README.md`](cs2/README.md).
+
 Файлы: [`Dockerfile`](../Dockerfile) ·
 [`docker-compose.prod.yml`](../docker-compose.prod.yml) ·
 [`nginx/major.kg.conf`](nginx/major.kg.conf) ·
@@ -103,8 +105,8 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 `openid.return_to` для входа через Steam, туда Valve возвращает игрока.
 
 `ADMIN_PASSWORD` — минимум 8 символов, задать свой. `STEAM_API_KEY`
-([получить](https://steamcommunity.com/dev/apikey)) нужен только для ника
-и аватара: сам вход работает и без него. `FACEIT_API_KEY` включает живое
+([получить](https://steamcommunity.com/dev/apikey)) необязателен: и вход,
+и ник с аватаром работают без него. `FACEIT_API_KEY` включает живое
 ELO — если он пустой, оставить `NEXT_PUBLIC_FACEIT_LIVE=false` в `.env`.
 
 ## Шаг 3. Сборка и запуск

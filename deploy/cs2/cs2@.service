@@ -1,0 +1,38 @@
+# Инстанс CS2-сервера. Номер в имени юнита задает смещение портов:
+#   cs2@1 → 27015 (игра и RCON), 27020 (SourceTV)
+#   cs2@2 → 27016,               27021
+#
+# Порты считает run.sh: systemd не запускает шелл, поэтому арифметику
+# в ExecStart писать нельзя.
+#
+#   cp deploy/cs2/cs2@.service /etc/systemd/system/
+#   systemctl enable --now cs2@1
+
+[Unit]
+Description=Counter-Strike 2 dedicated server #%i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=steam
+Group=steam
+EnvironmentFile=/etc/default/cs2
+
+WorkingDirectory=/home/steam/cs2/game/bin/linuxsteamrt64
+ExecStart=/home/steam/cs2/run.sh %i
+
+Restart=on-failure
+RestartSec=10
+# Движок держит много файлов карт и демок.
+LimitNOFILE=65536
+
+# Сервер не должен мочь ничего, кроме своей папки.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/steam/cs2
+
+[Install]
+WantedBy=multi-user.target

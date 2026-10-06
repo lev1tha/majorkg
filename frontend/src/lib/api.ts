@@ -3,6 +3,8 @@ import { cookies } from "next/headers"
 import type {
   AdminDto,
   AdminOverviewDto,
+  AdminParticipantDto,
+  AdminPlayerDto,
   AppealDto,
   FaqItemDto,
   BracketRoundDto,
@@ -16,6 +18,7 @@ import type {
   RegistrationStatus,
   TournamentDto,
   TournamentStatus,
+  ServerDto,
   ServerQueueItemDto,
   ViewerDto,
 } from "./types"
@@ -293,6 +296,22 @@ export async function getAdmin(): Promise<AdminDto | null> {
   }
 }
 
+/** Публичный список серверов с живым состоянием по A2S. */
+export async function getServers() {
+  const data = await safe(request<{ items: ServerDto[] }>(`/servers`, { revalidate: 0 }), {
+    items: [],
+  })
+  return data.items
+}
+
+export async function getAdminServers() {
+  const data = await safe(
+    request<{ items: ServerDto[] }>(`/admin/servers`, { withSession: true }),
+    { items: [] },
+  )
+  return data.items
+}
+
 /** Очередь серверов: карты предстоящих матчей после вето. */
 export async function getServerQueue(slug: string) {
   const data = await safe(
@@ -373,7 +392,7 @@ export async function getAdminTournament(slug: string): Promise<TournamentDto | 
 /** Все заявки турнира, включая отклоненные и снятые. */
 export async function getAdminRegistrations(slug: string) {
   const data = await safe(
-    request<{ items: ParticipantDto[] }>(`/admin/tournaments/${slug}/registrations`, {
+    request<{ items: AdminParticipantDto[] }>(`/admin/tournaments/${slug}/registrations`, {
       withSession: true,
     }),
     { items: [] },
@@ -383,7 +402,7 @@ export async function getAdminRegistrations(slug: string) {
 
 export function getAdminPlayers(params: PlayerQuery = {}) {
   return safe(
-    request<{ items: PlayerDto[]; total: number }>(`/admin/players${query({ ...params })}`, {
+    request<{ items: AdminPlayerDto[]; total: number }>(`/admin/players${query({ ...params })}`, {
       withSession: true,
     }),
     { items: [], total: 0 },

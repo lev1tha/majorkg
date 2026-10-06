@@ -1,6 +1,7 @@
 import { JoinProvider } from "@/components/join/join-provider"
 import { SiteFooter } from "@/components/layout/site-footer"
 import { SiteHeader } from "@/components/layout/site-header"
+import { BattleAlert } from "@/components/player/battle-alert"
 import { JsonLd } from "@/components/seo/json-ld"
 import { getViewer } from "@/lib/api"
 import { organizationLd, websiteLd } from "@/lib/seo"
@@ -22,6 +23,8 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         {children}
       </main>
       <SiteFooter />
+      {/* Сигнал к бою слушают только вошедшие: гостям трубить не о чем. */}
+      {viewer && <BattleAlert />}
     </JoinProvider>
   )
 }

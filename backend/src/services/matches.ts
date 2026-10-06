@@ -287,20 +287,61 @@ export function createAppeal(input: {
   return toAppealDto(row)
 }
 
+/**
+ * Решение судьи по апелляции.
+ *
+ * Подача апелляции замораживает матч в состоянии «на разборе», поэтому
+ * решение обязано его разморозить — иначе матч навсегда остается в
+ * очереди протоколов и в списке серверов. Состояние восстанавливается по
+ * фактическим данным: есть победитель — сыгран, есть счет по картам —
+ * идет, нет ничего — ждет.
+ *
+ * Если на матче висит еще одна открытая апелляция, он остается на
+ * разборе: разморозить его должно последнее решение, а не первое.
+ */
 export function resolveAppeal(
   id: number,
   status: "resolved" | "declined",
   resolution?: string,
 ): AppealDto {
-  const result = db
-    .prepare(
-      `UPDATE appeals SET status = ?, resolution = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
-    )
-    .run(status, resolution ?? null, id)
-  if (result.changes === 0) throw ApiError.notFound("Апелляция не найдена")
+  return tx(() => {
+    const result = db
+      .prepare(
+        `UPDATE appeals SET status = ?, resolution = ?, resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+      )
+      .run(status, resolution ?? null, id)
+    if (result.changes === 0) throw ApiError.notFound("Апелляция не найдена")
 
-  const row = db.prepare(`${APPEAL_SELECT} WHERE a.id = ?`).get(id) as AppealRow
-  return toAppealDto(row)
+    const row = db.prepare(`${APPEAL_SELECT} WHERE a.id = ?`).get(id) as AppealRow
+    unfreezeMatch(row.match_id)
+    return toAppealDto(row)
+  })
+}
+
+/** Снимает статус «на разборе», если открытых апелляций на матче больше нет. */
+function unfreezeMatch(matchId: number) {
+  const stillOpen = (
+    db
+      .prepare(`SELECT COUNT(*) AS n FROM appeals WHERE match_id = ? AND status = 'open'`)
+      .get(matchId) as { n: number }
+  ).n
+  if (stillOpen > 0) return
+
+  const match = db
+    .prepare(`SELECT state, winner FROM matches WHERE id = ?`)
+    .get(matchId) as { state: MatchState; winner: "a" | "b" | null } | undefined
+  if (!match || match.state !== "review") return
+
+  const maps = (
+    db.prepare(`SELECT COUNT(*) AS n FROM match_maps WHERE match_id = ?`).get(matchId) as {
+      n: number
+    }
+  ).n
+
+  const restored: MatchState = match.winner ? "done" : maps > 0 ? "live" : "pending"
+  db.prepare(
+    `UPDATE matches SET state = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?`,
+  ).run(restored, matchId)
 }
 
 /** Матчи турнира, ожидающие ввода счета — рабочая очередь судьи. */

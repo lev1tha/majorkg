@@ -51,6 +51,11 @@ export function destroySession(cookie: string | undefined) {
   if (id) db.prepare(`DELETE FROM sessions WHERE id = ?`).run(id)
 }
 
+/** Разлогинить игрока везде, кроме текущего браузера, — после смены пароля. */
+export function destroyOtherSessions(playerId: number, keepCookie: string | undefined) {
+  db.prepare(`DELETE FROM sessions WHERE player_id = ? AND id IS NOT ?`).run(playerId, unpack(keepCookie))
+}
+
 /** Периодическая уборка протухших сессий. */
 export function pruneSessions() {
   db.prepare(`DELETE FROM sessions WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%SZ','now')`).run()

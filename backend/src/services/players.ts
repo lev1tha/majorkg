@@ -2,7 +2,7 @@ import { db } from "../db/index.js"
 import { env } from "../env.js"
 import { levelFromElo } from "../lib/faceit.js"
 import { ApiError } from "../lib/http.js"
-import type { PlayerDto, PlayerPerformanceDto, PlayerStatus } from "../types.js"
+import type { AdminPlayerDto, PlayerDto, PlayerPerformanceDto, PlayerStatus } from "../types.js"
 
 export interface PlayerRow {
   id: number
@@ -29,11 +29,16 @@ export interface PlayerRow {
   trend: "up" | "down" | "flat"
   status: PlayerStatus
   elo_synced_at: string | null
+  steam_synced_at: string | null
+  password_hash: string | null
+  steam_verified: number
+  telegram: string | null
+  discord: string | null
 }
 
 const COLUMNS = `id, steam_id, nickname, faceit, faceit_id, avatar, faceit_avatar, role, country, city, elo, matches,
   win_rate, hltv_rating, kd, headshots, adr, kast, opening_win_rate, points, maps_played,
-  trend, status, elo_synced_at`
+  trend, status, elo_synced_at, steam_synced_at, password_hash, steam_verified, telegram, discord`
 
 export function toPlayerDto(row: PlayerRow, eloLive = false): PlayerDto {
   return {
@@ -44,6 +49,7 @@ export function toPlayerDto(row: PlayerRow, eloLive = false): PlayerDto {
     // Аватар Steam приоритетнее: игрок узнает себя по нему.
     avatar: row.avatar ?? row.faceit_avatar,
     faceitLinked: Boolean(row.faceit_id),
+    steamVerified: Boolean(row.steam_verified),
     role: row.role,
     country: row.country,
     city: row.city,
@@ -63,6 +69,11 @@ export function toPlayerDto(row: PlayerRow, eloLive = false): PlayerDto {
   }
 }
 
+/** Для админки: плюс контакты, которые публично не показываются. */
+export function toAdminPlayerDto(row: PlayerRow): AdminPlayerDto {
+  return { ...toPlayerDto(row), telegram: row.telegram, discord: row.discord }
+}
+
 export type PlayerSort = "elo" | "rating" | "kd" | "matches" | "points"
 
 const ORDER: Record<PlayerSort, string> = {
@@ -78,11 +89,11 @@ export function listPlayers(options: {
   sort?: PlayerSort
   limit: number
   offset: number
-  /** Админке нужны и заблокированные — публичным спискам нет. */
-  includeBanned?: boolean
+  /** Админке нужны и заблокированные, и контакты — публичным спискам нет. */
+  admin?: boolean
 }): { items: PlayerDto[]; total: number } {
   const sort = options.sort && options.sort in ORDER ? options.sort : "elo"
-  const where: string[] = options.includeBanned ? ["1 = 1"] : ["status != 'banned'"]
+  const where: string[] = options.admin ? ["1 = 1"] : ["status != 'banned'"]
   const params: unknown[] = []
 
   if (options.q) {
@@ -102,7 +113,7 @@ export function listPlayers(options: {
     )
     .all(...params, options.limit, options.offset) as PlayerRow[]
 
-  return { items: rows.map((row) => toPlayerDto(row)), total }
+  return { items: rows.map((row) => (options.admin ? toAdminPlayerDto(row) : toPlayerDto(row))), total }
 }
 
 export function findPlayerRowByNickname(nickname: string): PlayerRow | undefined {

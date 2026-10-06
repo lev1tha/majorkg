@@ -10,8 +10,9 @@ import { fetchSteamProfile } from "../lib/steam.js"
  * Оба привязаны к одному ключу — SteamID64, поэтому игроку не нужно
  * ничего вводить руками.
  *
- * Обе выгрузки необязательные: нет ключа или профиля — остаются прежние
- * значения, интерфейс честно помечает данные как снимок.
+ * Steam отвечает и без ключа (публичный XML-профиль), FACEIT — только с
+ * ключом. Не ответил источник — остаются прежние значения, интерфейс
+ * честно помечает данные как снимок.
  */
 
 /** Как часто имеет смысл ходить в FACEIT за одним и тем же игроком. */
@@ -24,13 +25,15 @@ interface SyncRow {
   faceit: string | null
   faceit_id: string | null
   elo_synced_at: string | null
+  steam_synced_at: string | null
+  nickname_custom: number
 }
 
 export interface SyncResult {
   steam: boolean
   faceit: boolean
-  /** Ключ не настроен — отличаем от «сходили и не нашли». */
-  skipped: "steam" | "faceit" | "both" | null
+  /** Ключ FACEIT не настроен — отличаем от «сходили и не нашли». */
+  skipped: "faceit" | null
 }
 
 function isFresh(syncedAt: string | null): boolean {
@@ -56,34 +59,42 @@ function freeNickname(desired: string, ownerId: number): string {
 /**
  * Подтягивает Steam и FACEIT для одного игрока.
  * @param force игнорировать TTL — ручное обновление из профиля или админки.
+ * @param steam false — Steam только что опрошен (вход), идем лишь в FACEIT.
  */
-export async function syncPlayer(playerId: number, { force = false } = {}): Promise<SyncResult> {
+export async function syncPlayer(
+  playerId: number,
+  { force = false, steam = true } = {},
+): Promise<SyncResult> {
   const row = db
-    .prepare(`SELECT id, steam_id, nickname, faceit, faceit_id, elo_synced_at FROM players WHERE id = ?`)
+    .prepare(
+      `SELECT id, steam_id, nickname, faceit, faceit_id, elo_synced_at, steam_synced_at, nickname_custom
+         FROM players WHERE id = ?`,
+    )
     .get(playerId) as SyncRow | undefined
 
   if (!row) return { steam: false, faceit: false, skipped: null }
 
-  const skipped =
-    !env.steamApiKey && !env.faceitApiKey
-      ? "both"
-      : !env.steamApiKey
-        ? "steam"
-        : !env.faceitApiKey
-          ? "faceit"
-          : null
+  const skipped = env.faceitApiKey ? null : "faceit"
 
-  if (!force && isFresh(row.elo_synced_at)) {
+  // У игрока без FACEIT elo_synced_at не появится никогда — без отметки
+  // Steam каждый просмотр профиля ходил бы во внешние API.
+  if (!force && (isFresh(row.elo_synced_at) || isFresh(row.steam_synced_at))) {
     return { steam: false, faceit: false, skipped }
   }
 
-  // Steam: ник и аватар.
+  // Steam: ник и аватар. Работает и без ключа. Ник, заданный на сайте
+  // руками, не трогаем — им могут входить по паролю.
   let steamUpdated = false
-  if (env.steamApiKey) {
+  if (steam) {
     const profile = await fetchSteamProfile(row.steam_id, env.steamApiKey)
-    if (profile.avatar || profile.nickname) {
-      db.prepare(`UPDATE players SET nickname = ?, avatar = COALESCE(?, avatar) WHERE id = ?`).run(
-        freeNickname(profile.nickname, row.id),
+    if (profile.resolved) {
+      db.prepare(
+        `UPDATE players
+            SET nickname = ?, avatar = COALESCE(?, avatar),
+                steam_synced_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+          WHERE id = ?`,
+      ).run(
+        row.nickname_custom ? row.nickname : freeNickname(profile.nickname, row.id),
         profile.avatar,
         row.id,
       )

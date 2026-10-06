@@ -35,7 +35,15 @@ export interface PlayerDto {
   eloLive: boolean
   /** Привязан ли профиль FACEIT (ищется по SteamID64 при входе). */
   faceitLinked: boolean
+  /** false — ссылку на Steam ввели вручную, через Steam игрок не входил. */
+  steamVerified: boolean
   syncedAt: string | null
+}
+
+/** Игрок в админке: плюс контакты, которые публично не показываются. */
+export interface AdminPlayerDto extends PlayerDto {
+  telegram: string | null
+  discord: string | null
 }
 
 export interface PlayerPerformanceDto {
@@ -99,6 +107,12 @@ export interface ParticipantDto {
   status: RegistrationStatus
   player: Pick<PlayerDto, "id" | "nickname" | "elo" | "level" | "role" | "city" | "hltvRating" | "kd">
   createdAt: string
+}
+
+/** Заявка в админке: плюс отметка оплаты, которую видит только организатор. */
+export interface AdminParticipantDto extends ParticipantDto {
+  /** Когда организатор отметил взнос оплаченным. null — не оплачен. */
+  paidAt: string | null
 }
 
 export interface LineupMemberDto {
@@ -189,7 +203,7 @@ export interface ViewerDto {
   id: number
   nickname: string
   steamId: string
-  /** Аватар из Steam. null — ключ STEAM_API_KEY не настроен. */
+  /** Аватар из Steam. null — Steam еще ни разу не ответил. */
   avatar: string | null
   status: PlayerStatus
   elo: number
@@ -198,6 +212,14 @@ export interface ViewerDto {
   steamSynced: boolean
   /** Привязан ли профиль FACEIT — ищется по SteamID64 при входе. */
   faceitLinked: boolean
+  /** false — аккаунт заведен по нику и паролю, Steam указан вручную. */
+  steamVerified: boolean
+  /** Можно ли войти по нику и паролю. */
+  hasPassword: boolean
+  role: string
+  city: string | null
+  telegram: string | null
+  discord: string | null
 }
 
 /** Организатор: отдельная учетка со входом по логину и паролю. */
@@ -214,6 +236,41 @@ export interface FaqItemDto {
   answer: string
   position: number
   published: boolean
+}
+
+// ──────────────────────── Игровые серверы ─────────────────────────────
+
+export interface ServerStatusDto {
+  online: boolean
+  map: string | null
+  players: number
+  maxPlayers: number
+  ping: number | null
+  checkedAt: string
+}
+
+export interface ServerDto {
+  id: number
+  name: string
+  host: string
+  port: number
+  location: string
+  public: boolean
+  active: boolean
+  note: string
+  /** Есть ли пароль RCON. Сам пароль наружу не отдается. */
+  rconConfigured: boolean
+  connect: string
+  status: ServerStatusDto
+}
+
+export interface MatchConfigDto {
+  matchId: number
+  server: { id: number; name: string; connect: string } | null
+  maps: string[]
+  password: string
+  commands: string[]
+  script: string
 }
 
 // ───────────────────────────── Вето карт ──────────────────────────────
@@ -262,6 +319,8 @@ export interface ServerQueueItemDto {
 export interface AdminOverviewDto {
   /** Сумма ожидаемых взносов по активным турнирам, сом. */
   expectedFees: number
+  /** Сколько из них уже отмечено оплаченным, сом. */
+  collectedFees: number
   activeTournaments: number
   registeredPlayers: number
   pendingRegistrations: number
@@ -269,4 +328,17 @@ export interface AdminOverviewDto {
   openAppeals: number
   playersTotal: number
   matchesTotal: number
+}
+
+/**
+ * Сигнал к бою для участника: на сайте играет боевой рог и всплывает окно.
+ * key уникален для события — по нему браузер помнит, что уже протрубил.
+ */
+export interface BattleAlertDto {
+  key: string
+  /** rally — организатор созвал участников, live — турнир начался, match — ваш матч в эфире. */
+  kind: "rally" | "live" | "match"
+  title: string
+  text: string
+  href: string
 }

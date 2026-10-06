@@ -4,6 +4,7 @@ import { z } from "zod"
 import { db } from "../db/index.js"
 import { ApiError, handler, parsePage, str, param } from "../lib/http.js"
 import { requireAdmin } from "../middleware/auth.js"
+import { rally } from "../services/alerts.js"
 import { generateBracket } from "../services/bracket.js"
 import { drawLineups } from "../services/lineups.js"
 import { createFaq, deleteFaq, listFaq, updateFaq } from "../services/faq.js"
@@ -17,7 +18,7 @@ import {
 } from "../services/matches.js"
 import { syncAllPlayers } from "../services/faceit-sync.js"
 import { listPlayers, refreshPlayer, setPlayerStatus } from "../services/players.js"
-import { listAllRegistrations, listPending, moderate } from "../services/registrations.js"
+import { listAllRegistrations, listPending, moderate, setPaid } from "../services/registrations.js"
 import {
   createTournament,
   deleteTournament,
@@ -25,6 +26,16 @@ import {
   listTournaments,
   updateTournament,
 } from "../services/tournaments.js"
+import {
+  assignServer,
+  buildMatchConfig,
+  createServer,
+  deleteServer,
+  listServers,
+  pushMatchConfig,
+  refreshServer,
+  updateServer,
+} from "../services/servers.js"
 import { makeVetoMove, resetVeto, serverQueue } from "../services/veto.js"
 import type { AdminOverviewDto } from "../types.js"
 
@@ -40,20 +51,20 @@ adminRouter.get(
     const count = (sql: string, ...params: unknown[]) =>
       (db.prepare(sql).get(...params) as { n: number }).n
 
-    const expectedFees = (
-      db
-        .prepare(
-          `SELECT COALESCE(SUM(t.entry_fee), 0) AS n
-             FROM registrations r
-             JOIN tournaments t ON t.id = r.tournament_id
-            WHERE r.status IN ('confirmed', 'checked_in')
-              AND t.status IN ('registration', 'checkin', 'live')`,
-        )
-        .get() as { n: number }
-    ).n
+    const fees = db
+      .prepare(
+        `SELECT COALESCE(SUM(t.entry_fee), 0)                                         AS expected,
+                COALESCE(SUM(CASE WHEN r.paid_at IS NOT NULL THEN t.entry_fee END), 0) AS collected
+           FROM registrations r
+           JOIN tournaments t ON t.id = r.tournament_id
+          WHERE r.status IN ('confirmed', 'checked_in')
+            AND t.status IN ('registration', 'checkin', 'live')`,
+      )
+      .get() as { expected: number; collected: number }
 
     const overview: AdminOverviewDto = {
-      expectedFees,
+      expectedFees: fees.expected,
+      collectedFees: fees.collected,
       activeTournaments: count(
         `SELECT COUNT(*) AS n FROM tournaments WHERE status IN ('registration', 'checkin', 'live')`,
       ),
@@ -156,6 +167,14 @@ adminRouter.post(
   }),
 )
 
+/** «Созвать участников»: у подтвержденных с открытым сайтом трубит рог. */
+adminRouter.post(
+  "/tournaments/:slug/rally",
+  handler((req, res) => {
+    res.json(rally(param(req, "slug")))
+  }),
+)
+
 /** Построение верхней сетки по посеву составов. */
 adminRouter.post(
   "/tournaments/:slug/bracket",
@@ -185,6 +204,18 @@ adminRouter.patch(
       .parse(req.body)
 
     res.json({ registration: moderate(id, status) })
+  }),
+)
+
+/** Отметка «взнос оплачен» — действует только в турнире этой заявки. */
+adminRouter.patch(
+  "/registrations/:id/payment",
+  handler((req, res) => {
+    const id = Number(param(req, "id"))
+    if (!Number.isInteger(id)) throw ApiError.badRequest("Некорректный идентификатор заявки")
+
+    const { paid } = z.object({ paid: z.boolean() }).parse(req.body)
+    res.json({ registration: setPaid(id, paid) })
   }),
 )
 
@@ -275,6 +306,102 @@ adminRouter.patch(
   }),
 )
 
+// ─────────────────────── Реестр игровых серверов ──────────────────────
+
+const serverSchema = z.object({
+  name: z.string().min(2, "Название минимум 2 символа").max(80),
+  host: z.string().min(3, "Укажите адрес или IP").max(200),
+  port: z.number().int().min(1).max(65535).optional(),
+  rconPassword: z.string().max(200).nullable().optional(),
+  location: z.string().max(80).optional(),
+  public: z.boolean().optional(),
+  active: z.boolean().optional(),
+  note: z.string().max(400).optional(),
+})
+
+function serverId(value: string): number {
+  const id = Number(value)
+  if (!Number.isInteger(id)) throw ApiError.badRequest("Некорректный идентификатор сервера")
+  return id
+}
+
+adminRouter.get(
+  "/servers",
+  handler(async (_req, res) => {
+    res.json({ items: await listServers() })
+  }),
+)
+
+adminRouter.post(
+  "/servers",
+  handler(async (req, res) => {
+    res.status(201).json({ server: await createServer(serverSchema.parse(req.body)) })
+  }),
+)
+
+adminRouter.patch(
+  "/servers/:id",
+  handler(async (req, res) => {
+    res.json({
+      server: await updateServer(serverId(param(req, "id")), serverSchema.partial().parse(req.body)),
+    })
+  }),
+)
+
+adminRouter.delete(
+  "/servers/:id",
+  handler((req, res) => {
+    deleteServer(serverId(param(req, "id")))
+    res.status(204).end()
+  }),
+)
+
+/** Спросить сервер прямо сейчас, минуя кэш состояния. */
+adminRouter.post(
+  "/servers/:id/check",
+  handler(async (req, res) => {
+    res.json({ server: await refreshServer(serverId(param(req, "id"))) })
+  }),
+)
+
+// ───────────────────── Подготовка матча к игре ────────────────────────
+
+adminRouter.patch(
+  "/matches/:id/server",
+  handler((req, res) => {
+    const id = matchId(param(req, "id"))
+    const { serverId: target } = z
+      .object({ serverId: z.number().int().nullable() })
+      .parse(req.body)
+
+    assignServer(id, target)
+    // Конфиг готов только после вето — назначить сервер можно и раньше.
+    let config: ReturnType<typeof buildMatchConfig> | null = null
+    try {
+      config = buildMatchConfig(id)
+    } catch {
+      config = null
+    }
+    res.json({ config })
+  }),
+)
+
+/** Конфиг матча из результата вето: карты, пароль лобби, команды. */
+adminRouter.get(
+  "/matches/:id/config",
+  handler((req, res) => {
+    res.json({ config: buildMatchConfig(matchId(param(req, "id"))) })
+  }),
+)
+
+/** Выкатить конфиг на сервер по RCON. */
+adminRouter.post(
+  "/matches/:id/config",
+  handler(async (req, res) => {
+    res.json(await pushMatchConfig(matchId(param(req, "id"))))
+  }),
+)
+
 // ──────────────────────────── Вето карт ──────────────────────────────
 
 /** Ход за сторону — когда состав не выходит на связь. */
@@ -349,7 +476,7 @@ adminRouter.get(
   "/players",
   handler((req, res) => {
     const { limit, offset } = parsePage(req.query, 50)
-    res.json(listPlayers({ q: str(req.query.q), limit, offset, includeBanned: true }))
+    res.json(listPlayers({ q: str(req.query.q), limit, offset, admin: true }))
   }),
 )
 

@@ -34,6 +34,21 @@ const COLUMNS: ColumnPatch[] = [
   // Привязка к FACEIT по SteamID64 и аватар оттуда.
   { table: "players", column: "faceit_id", definition: "TEXT" },
   { table: "players", column: "faceit_avatar", definition: "TEXT" },
+  // Сервер, на котором играется матч.
+  { table: "matches", column: "server_id", definition: "INTEGER REFERENCES servers (id)" },
+  // Когда ник и аватар последний раз пришли из Steam.
+  { table: "players", column: "steam_synced_at", definition: "TEXT" },
+  // Отметка организатора «взнос оплачен» — своя у каждой заявки.
+  { table: "registrations", column: "paid_at", definition: "TEXT" },
+  // Вход по нику и паролю и ручной профиль. Все прежние игроки пришли
+  // через Steam, поэтому steam_verified у них по умолчанию 1.
+  { table: "players", column: "password_hash", definition: "TEXT" },
+  { table: "players", column: "steam_verified", definition: "INTEGER NOT NULL DEFAULT 1" },
+  { table: "players", column: "nickname_custom", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "players", column: "telegram", definition: "TEXT" },
+  { table: "players", column: "discord", definition: "TEXT" },
+  // Сигнал «сбор» от организатора.
+  { table: "tournaments", column: "rally_at", definition: "TEXT" },
 ]
 
 function columnsOf(db: Database, table: string): Set<string> {

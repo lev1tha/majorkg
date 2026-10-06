@@ -3,13 +3,14 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Ban, CheckCheck, Loader2, Search } from "lucide-react"
+import { Ban, CheckCheck, Loader2, RefreshCw, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FaceitLevel } from "@/components/player/faceit-level"
-import type { PlayerDto, PlayerStatus } from "@/lib/types"
+import { ApiError, syncAllPlayers, syncPlayerData } from "@/lib/api-client"
+import type { AdminPlayerDto, PlayerStatus } from "@/lib/types"
 import { formatNumber } from "@/lib/utils"
 
 const STATUS: Record<PlayerStatus, { label: string; variant: "success" | "prize" | "live" }> = {
@@ -18,18 +19,22 @@ const STATUS: Record<PlayerStatus, { label: string; variant: "success" | "prize"
   banned: { label: "Заблокирован", variant: "live" },
 }
 
-export function PlayerModeration({ players }: { players: PlayerDto[] }) {
+export function PlayerModeration({ players }: { players: AdminPlayerDto[] }) {
   const router = useRouter()
   const [query, setQuery] = React.useState("")
   const [pendingId, setPendingId] = React.useState<number | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const [syncing, setSyncing] = React.useState<number | "all" | null>(null)
+  const [syncNote, setSyncNote] = React.useState<string | null>(null)
   const deferred = React.useDeferredValue(query)
 
   const list = React.useMemo(() => {
     const needle = deferred.trim().toLowerCase()
     if (!needle) return players
     return players.filter((player) =>
-      `${player.nickname} ${player.steamId} ${player.faceit ?? ""}`.toLowerCase().includes(needle),
+      `${player.nickname} ${player.steamId} ${player.faceit ?? ""} ${player.telegram ?? ""} ${player.discord ?? ""}`
+        .toLowerCase()
+        .includes(needle),
     )
   }, [players, deferred])
 
@@ -55,23 +60,71 @@ export function PlayerModeration({ players }: { players: PlayerDto[] }) {
     }
   }
 
+  /** Подтянуть Steam и FACEIT: ник, аватар, ELO и статистику. */
+  const sync = async (id: number) => {
+    setSyncing(id)
+    setError(null)
+    try {
+      await syncPlayerData(id)
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "Не удалось обновить игрока")
+    } finally {
+      setSyncing(null)
+    }
+  }
+
+  const syncAll = async () => {
+    setSyncing("all")
+    setError(null)
+    setSyncNote(null)
+    try {
+      const result = await syncAllPlayers()
+      setSyncNote(`Обработано ${result.processed}, привязка FACEIT нашлась у ${result.faceit}.`)
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "Не удалось обновить игроков")
+    } finally {
+      setSyncing(null)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="relative sm:w-72">
-        <Search
-          size={15}
-          strokeWidth={1.5}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/30"
-        />
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Ник, Steam ID или FACEIT"
-          aria-label="Поиск игрока"
-          className="h-10 pl-9"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative sm:w-72">
+          <Search
+            size={15}
+            strokeWidth={1.5}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/30"
+          />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Ник, Steam ID, FACEIT или контакт"
+            aria-label="Поиск игрока"
+            className="h-10 pl-9"
+          />
+        </div>
+
+        <Button
+          variant="outline"
+          size="md"
+          className="ml-auto"
+          disabled={syncing !== null}
+          onClick={() => void syncAll()}
+          title="Подтянуть ник, аватар и рейтинг для всех игроков"
+        >
+          {syncing === "all" ? (
+            <Loader2 strokeWidth={1.5} className="animate-spin" />
+          ) : (
+            <RefreshCw strokeWidth={1.5} />
+          )}
+          Обновить всех
+        </Button>
       </div>
 
+      {syncNote && <p className="text-[12px] text-success">{syncNote}</p>}
       {error && <p className="text-[12px] text-accent-soft">{error}</p>}
 
       <div className="panel overflow-hidden rounded-xl">
@@ -96,22 +149,53 @@ export function PlayerModeration({ players }: { players: PlayerDto[] }) {
                 <div className="flex min-w-0 items-center gap-3">
                   <FaceitLevel elo={player.elo} size="sm" />
                   <div className="min-w-0">
-                    <Link
-                      href={`/players/${player.nickname}`}
-                      className="truncate text-[13.5px] font-medium text-white transition-colors hover:text-accent-soft"
-                    >
-                      {player.nickname}
-                    </Link>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Link
+                        href={`/players/${player.nickname}`}
+                        className="truncate text-[13.5px] font-medium text-white transition-colors hover:text-accent-soft"
+                      >
+                        {player.nickname}
+                      </Link>
+                      {!player.steamVerified && (
+                        <Badge
+                          variant="prize"
+                          size="sm"
+                          className="shrink-0"
+                          title="Ссылку на Steam игрок ввел вручную и через Steam не входил — сверьте аккаунт"
+                        >
+                          Steam не подтвержден
+                        </Badge>
+                      )}
+                    </div>
                     <p className="truncate text-[11.5px] text-white/30">
                       {player.role}
                       {player.city ? ` · ${player.city}` : ""}
+                      {player.telegram && (
+                        <>
+                          {" · "}
+                          <a
+                            href={`https://t.me/${player.telegram}`}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="text-white/50 hover:text-accent-soft"
+                          >
+                            tg @{player.telegram}
+                          </a>
+                        </>
+                      )}
+                      {player.discord ? ` · ds ${player.discord}` : ""}
                     </p>
                   </div>
                 </div>
 
-                <span className="mono hidden truncate text-[11.5px] text-white/35 xl:block">
+                <a
+                  href={`https://steamcommunity.com/profiles/${player.steamId}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="mono hidden truncate text-[11.5px] text-white/35 transition-colors hover:text-accent-soft xl:block"
+                >
                   {player.steamId}
-                </span>
+                </a>
                 <span className="mono hidden text-right text-[12.5px] text-white/70 xl:block">
                   {formatNumber(player.elo)}
                 </span>
@@ -125,6 +209,20 @@ export function PlayerModeration({ players }: { players: PlayerDto[] }) {
                 </span>
 
                 <div className="flex shrink-0 justify-end gap-1.5">
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    aria-label="Обновить данные игрока"
+                    title="Подтянуть Steam и FACEIT"
+                    disabled={syncing !== null}
+                    onClick={() => void sync(player.id)}
+                  >
+                    {syncing === player.id ? (
+                      <Loader2 strokeWidth={1.5} className="animate-spin" />
+                    ) : (
+                      <RefreshCw strokeWidth={1.5} />
+                    )}
+                  </Button>
                   {player.status !== "active" && (
                     <Button
                       variant="subtle"

@@ -4,6 +4,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { AdminPageTitle } from "@/components/admin/admin-shell"
+import { RallyButton } from "@/components/admin/rally-button"
 import { RegistrationTable } from "@/components/admin/registration-table"
 import { TournamentEditor, TournamentSummary } from "@/components/admin/tournament-editor"
 import { StatusBadge } from "@/components/marketing/tournament-card"
@@ -20,6 +21,10 @@ export default async function AdminTournamentPage({
   if (!tournament) notFound()
 
   const registrations = await getAdminRegistrations(slug)
+  const confirmed = registrations.filter(
+    (item) => item.status === "confirmed" || item.status === "checked_in",
+  ).length
+  const active = ["registration", "checkin", "live"].includes(tournament.status)
 
   return (
     <>
@@ -39,6 +44,7 @@ export default async function AdminTournamentPage({
         action={
           <div className="flex flex-wrap items-center gap-2.5">
             <StatusBadge status={tournament.status} />
+            {active && <RallyButton slug={tournament.slug} confirmed={confirmed} />}
             <Button variant="outline" size="md" asChild>
               <Link href={`/tournaments/${tournament.slug}`} target="_blank">
                 Открыть на сайте
@@ -58,7 +64,11 @@ export default async function AdminTournamentPage({
             {registrations.length}
           </span>
         </h2>
-        <RegistrationTable slug={tournament.slug} items={registrations} />
+        <RegistrationTable
+          items={registrations}
+          entryFee={tournament.entryFee}
+          finished={tournament.status === "finished"}
+        />
       </section>
 
       <TournamentEditor tournament={tournament} />

@@ -1,7 +1,7 @@
 import { db, tx } from "../db/index.js"
 import { levelFromElo } from "../lib/faceit.js"
 import { ApiError } from "../lib/http.js"
-import type { ParticipantDto, RegistrationStatus } from "../types.js"
+import type { AdminParticipantDto, ParticipantDto, RegistrationStatus } from "../types.js"
 import { requireTournamentRow } from "./tournaments.js"
 
 /**
@@ -14,6 +14,7 @@ interface ParticipantRow {
   seed: number | null
   status: RegistrationStatus
   created_at: string
+  paid_at: string | null
   player_id: number
   nickname: string
   elo: number
@@ -28,6 +29,7 @@ const PARTICIPANT_SELECT = `
          r.seed         AS seed,
          r.status       AS status,
          r.created_at   AS created_at,
+         r.paid_at      AS paid_at,
          p.id           AS player_id,
          p.nickname     AS nickname,
          p.elo          AS elo,
@@ -55,6 +57,11 @@ function toParticipantDto(row: ParticipantRow): ParticipantDto {
       kd: row.kd,
     },
   }
+}
+
+/** Для админки: та же заявка плюс отметка оплаты, которой нет в публичном DTO. */
+function toAdminParticipantDto(row: ParticipantRow): AdminParticipantDto {
+  return { ...toParticipantDto(row), paidAt: row.paid_at }
 }
 
 /** Статусы, которые занимают слот. */
@@ -188,6 +195,7 @@ export function listPending(limit: number, offset: number): PendingRegistration[
               r.seed         AS seed,
               r.status       AS status,
               r.created_at   AS created_at,
+              r.paid_at      AS paid_at,
               p.id           AS player_id,
               p.nickname     AS nickname,
               p.elo          AS elo,
@@ -216,9 +224,10 @@ export function listPending(limit: number, offset: number): PendingRegistration[
 /**
  * Все заявки турнира, включая отклоненные и снятые.
  * Публичный список показывает только активные — организатору нужна
- * полная картина, чтобы вернуть ошибочно отклоненного игрока.
+ * полная картина, чтобы вернуть ошибочно отклоненного игрока. Отметка
+ * оплаты тоже только здесь: игрокам и зрителям она не отдается.
  */
-export function listAllRegistrations(slug: string): ParticipantDto[] {
+export function listAllRegistrations(slug: string): AdminParticipantDto[] {
   const tournament = requireTournamentRow(slug)
   const rows = db
     .prepare(
@@ -234,7 +243,44 @@ export function listAllRegistrations(slug: string): ParticipantDto[] {
           p.elo DESC`,
     )
     .all(tournament.id) as ParticipantRow[]
-  return rows.map(toParticipantDto)
+  return rows.map(toAdminParticipantDto)
+}
+
+/**
+ * Отметка организатора «взнос оплачен».
+ *
+ * Живет на заявке, а заявка — на одном турнире, поэтому обнулять ничего не
+ * нужно: в следующий турнир игрок заявляется заново и приходит без отметки.
+ * У завершенного турнира отметки уже не показываются и не меняются.
+ */
+export function setPaid(registrationId: number, paid: boolean): AdminParticipantDto {
+  const found = db
+    .prepare(
+      `SELECT t.status AS tournament_status, t.entry_fee AS entry_fee
+         FROM registrations r
+         JOIN tournaments t ON t.id = r.tournament_id
+        WHERE r.id = ?`,
+    )
+    .get(registrationId) as { tournament_status: string; entry_fee: number } | undefined
+
+  if (!found) throw ApiError.notFound("Заявка не найдена")
+  if (found.tournament_status === "finished") throw ApiError.conflict("Турнир завершен — оплата больше не отмечается")
+  if (paid && found.entry_fee === 0) throw ApiError.conflict("Турнир бесплатный — взноса нет")
+
+  db.prepare(
+    `UPDATE registrations
+        SET paid_at = CASE WHEN ? THEN COALESCE(paid_at, strftime('%Y-%m-%dT%H:%M:%SZ','now')) END
+      WHERE id = ?`,
+  ).run(paid ? 1 : 0, registrationId)
+
+  const row = db
+    .prepare(
+      `${PARTICIPANT_SELECT}
+        WHERE r.id = ?`,
+    )
+    .get(registrationId) as ParticipantRow | undefined
+  if (!row) throw ApiError.notFound("Заявка не найдена")
+  return toAdminParticipantDto(row)
 }
 
 /** Турниры игрока — для страницы «Мои заявки». */

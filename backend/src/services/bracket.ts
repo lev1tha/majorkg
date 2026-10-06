@@ -27,6 +27,7 @@ interface MatchRow {
   scheduled_at: string | null
   note: string
   proof: number
+  server_id: number | null
   tournament_slug?: string
   tournament_title?: string
   tag_a?: string | null

@@ -3,15 +3,15 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Check, Loader2, RotateCcw, Search, UserCheck, X } from "lucide-react"
+import { BadgeCheck, Check, CircleDashed, Loader2, RotateCcw, Search, UserCheck, X } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { FaceitLevel } from "@/components/player/faceit-level"
-import { ApiError, moderateRegistration } from "@/lib/api-client"
-import type { ParticipantDto, RegistrationStatus } from "@/lib/types"
-import { cn, formatNumber } from "@/lib/utils"
+import { ApiError, moderateRegistration, setRegistrationPaid } from "@/lib/api-client"
+import type { AdminParticipantDto, RegistrationStatus } from "@/lib/types"
+import { cn, formatDateTime, formatNumber } from "@/lib/utils"
 
 const STATUS: Record<
   RegistrationStatus,
@@ -24,15 +24,24 @@ const STATUS: Record<
   withdrawn: { label: "Снята игроком", variant: "outline" },
 }
 
-const FILTERS: { id: RegistrationStatus | "all" | "active"; label: string }[] = [
+type FilterId = RegistrationStatus | "all" | "active" | "unpaid"
+
+const FILTERS: { id: FilterId; label: string }[] = [
   { id: "active", label: "Активные" },
   { id: "pending", label: "На модерации" },
   { id: "confirmed", label: "Подтвержденные" },
   { id: "checked_in", label: "Прошли check-in" },
+  { id: "unpaid", label: "Не оплатили" },
   { id: "all", label: "Все" },
 ]
 
 const ACTIVE: RegistrationStatus[] = ["pending", "confirmed", "checked_in"]
+
+/** Колонка «Оплата» есть не всегда — две сетки, чтобы Tailwind видел классы целиком. */
+const GRID = {
+  plain: "lg:grid-cols-[48px_minmax(0,1fr)_110px_150px_200px]",
+  paid: "lg:grid-cols-[48px_minmax(0,1fr)_110px_150px_130px_200px]",
+}
 
 /**
  * Заявки турнира с модерацией.
@@ -40,25 +49,37 @@ const ACTIVE: RegistrationStatus[] = ["pending", "confirmed", "checked_in"]
  * Жеребьевка берет только подтвержденные и прошедших check-in, поэтому
  * подтверждение здесь — не формальность: неподтвержденный игрок просто не
  * попадет в составы.
+ *
+ * Отметка «Оплатил» видна только здесь, в админке, и относится к этому
+ * турниру. Когда турнир завершен, колонка пропадает: в следующем турнире
+ * у игрока новая заявка и отметки на ней нет.
  */
 export function RegistrationTable({
-  slug,
   items,
+  entryFee,
+  finished,
 }: {
-  slug: string
-  items: ParticipantDto[]
+  items: AdminParticipantDto[]
+  /** Взнос турнира, сом. 0 — бесплатный, оплату отмечать незачем. */
+  entryFee: number
+  finished: boolean
 }) {
   const router = useRouter()
-  const [filter, setFilter] = React.useState<(typeof FILTERS)[number]["id"]>("active")
+  const payments = entryFee > 0 && !finished
+  const [filter, setFilter] = React.useState<FilterId>("active")
   const [query, setQuery] = React.useState("")
   const [busyId, setBusyId] = React.useState<number | null>(null)
+  const [payingId, setPayingId] = React.useState<number | null>(null)
   const [bulk, setBulk] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const deferred = React.useDeferredValue(query)
 
   const counts = React.useMemo(() => {
-    const map = { pending: 0, confirmed: 0, checked_in: 0, rejected: 0, withdrawn: 0 }
-    for (const item of items) map[item.status] += 1
+    const map = { pending: 0, confirmed: 0, checked_in: 0, rejected: 0, withdrawn: 0, paid: 0, unpaid: 0 }
+    for (const item of items) {
+      map[item.status] += 1
+      if (ACTIVE.includes(item.status)) map[item.paidAt ? "paid" : "unpaid"] += 1
+    }
     return map
   }, [items])
 
@@ -66,7 +87,8 @@ export function RegistrationTable({
     const needle = deferred.trim().toLowerCase()
     return items.filter((item) => {
       if (filter === "active" && !ACTIVE.includes(item.status)) return false
-      if (filter !== "all" && filter !== "active" && item.status !== filter) return false
+      if (filter === "unpaid" && (!ACTIVE.includes(item.status) || item.paidAt)) return false
+      if (!["all", "active", "unpaid"].includes(filter) && item.status !== filter) return false
       if (needle && !item.player.nickname.toLowerCase().includes(needle)) return false
       return true
     })
@@ -82,6 +104,19 @@ export function RegistrationTable({
       setError(cause instanceof ApiError ? cause.message : "Не удалось обновить заявку")
     } finally {
       setBusyId(null)
+    }
+  }
+
+  const togglePaid = async (item: AdminParticipantDto) => {
+    setPayingId(item.registrationId)
+    setError(null)
+    try {
+      await setRegistrationPaid(item.registrationId, !item.paidAt)
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "Не удалось отметить оплату")
+    } finally {
+      setPayingId(null)
     }
   }
 
@@ -108,7 +143,7 @@ export function RegistrationTable({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex gap-1 overflow-x-auto rounded-[12px] border border-white/[0.07] bg-white/[0.02] p-1">
-          {FILTERS.map((item) => {
+          {FILTERS.filter((item) => payments || item.id !== "unpaid").map((item) => {
             const active = filter === item.id
             const count =
               item.id === "all"
@@ -149,6 +184,16 @@ export function RegistrationTable({
           />
         </div>
 
+        {payments && (
+          <p className="text-[12.5px] text-white/40">
+            Оплатили{" "}
+            <span className="mono text-white/75">
+              {counts.paid} из {counts.paid + counts.unpaid}
+            </span>
+            <span className="mono text-white/30"> · {formatNumber(counts.paid * entryFee)} сом</span>
+          </p>
+        )}
+
         {counts.pending > 0 && (
           <Button
             variant="primary"
@@ -170,11 +215,17 @@ export function RegistrationTable({
       {error && <p className="text-[12.5px] text-accent-soft">{error}</p>}
 
       <div className="panel overflow-hidden rounded-xl">
-        <div className="hidden grid-cols-[48px_minmax(0,1fr)_110px_150px_200px] items-center gap-4 border-b border-white/[0.07] px-5 py-3 text-[10.5px] font-medium uppercase tracking-[0.14em] text-white/30 lg:grid">
+        <div
+          className={cn(
+            "hidden items-center gap-4 border-b border-white/[0.07] px-5 py-3 text-[10.5px] font-medium uppercase tracking-[0.14em] text-white/30 lg:grid",
+            payments ? GRID.paid : GRID.plain,
+          )}
+        >
           <span>Посев</span>
           <span>Игрок</span>
           <span className="text-right">ELO</span>
           <span>Статус</span>
+          {payments && <span>Оплата</span>}
           <span className="text-right">Действие</span>
         </div>
 
@@ -182,10 +233,15 @@ export function RegistrationTable({
           {list.map((item) => {
             const status = STATUS[item.status]
             const busy = busyId === item.registrationId
+            const paying = payingId === item.registrationId
             return (
               <li
                 key={item.registrationId}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-5 py-3 transition-colors hover:bg-white/[0.02] lg:grid-cols-[48px_minmax(0,1fr)_110px_150px_200px]"
+                className={cn(
+                  "grid items-center gap-4 px-5 py-3 transition-colors hover:bg-white/[0.02]",
+                  payments ? "grid-cols-[minmax(0,1fr)_auto_auto]" : "grid-cols-[minmax(0,1fr)_auto]",
+                  payments ? GRID.paid : GRID.plain,
+                )}
               >
                 <span className="mono hidden text-[12px] text-white/25 lg:block">
                   {item.seed ?? "—"}
@@ -216,6 +272,33 @@ export function RegistrationTable({
                     {status.label}
                   </Badge>
                 </span>
+
+                {payments && (
+                  <span>
+                    <Button
+                      variant={item.paidAt ? "subtle" : "ghost"}
+                      size="xs"
+                      disabled={paying}
+                      aria-pressed={Boolean(item.paidAt)}
+                      title={
+                        item.paidAt
+                          ? `Отмечено ${formatDateTime(item.paidAt)}. Нажмите, чтобы снять`
+                          : `Отметить взнос ${formatNumber(entryFee)} сом оплаченным`
+                      }
+                      className={cn(item.paidAt ? "text-success" : "text-white/35")}
+                      onClick={() => void togglePaid(item)}
+                    >
+                      {paying ? (
+                        <Loader2 strokeWidth={1.5} className="animate-spin" />
+                      ) : item.paidAt ? (
+                        <BadgeCheck strokeWidth={1.5} />
+                      ) : (
+                        <CircleDashed strokeWidth={1.5} />
+                      )}
+                      {item.paidAt ? "Оплатил" : "Не оплачен"}
+                    </Button>
+                  </span>
+                )}
 
                 <div className="flex shrink-0 justify-end gap-1.5">
                   {item.status === "pending" && (

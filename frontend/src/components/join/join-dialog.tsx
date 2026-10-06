@@ -177,7 +177,7 @@ export function JoinDialog({ tournament, viewer, open, onOpenChange }: JoinDialo
             </span>
             <div className="flex flex-col gap-1.5">
               <h3 className="font-display text-[18px] font-bold text-white">
-                Нужен вход через Steam
+                Нужен вход
               </h3>
               <p className="max-w-[360px] text-[13px] leading-relaxed text-white/45">
                 Заявка привязывается к вашему Steam ID — по нему судья сверяет состав на карте.
@@ -189,6 +189,9 @@ export function JoinDialog({ tournament, viewer, open, onOpenChange }: JoinDialo
                 Войти через Steam
               </a>
             </Button>
+            <Link href="/login" className="text-[12.5px] text-white/40 transition-colors hover:text-white/70">
+              Нет Steam под рукой? Войти по нику
+            </Link>
           </motion.div>
         ) : (
           <motion.div
